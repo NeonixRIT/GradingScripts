@@ -74,9 +74,8 @@ class RepoHandler(Thread):
                 print(f'{LIGHT_RED}IndexError while finding average lines per commit for `{self.__repo.name}`.{WHITE}') # Print error to end user
                 logging.warning(f'IndexError while finding average lines per commit for `{self.__repo.name}`.') # log warning to log file
         except: # Catch exception raised and interrupt main thread
-            print(f'ERROR: Sorry, ran into a problem while cloning `{self.__repo.name}`. Check {LOG_FILE_PATH}.') # print error to end user
+            print(f'{LIGHT_RED}ERROR{WHITE}: Ran into a problem while cloning/resetting `{self.__repo.name}`, skipping. Check {LOG_FILE_PATH}.') # print error to end user
             logging.exception('ERROR:') # log error to log file (logging automatically is passed exception)
-            _thread.interrupt_main() # Interrupt main thread. 
 
 
     def clone_repo(self):
@@ -113,6 +112,8 @@ class RepoHandler(Thread):
         '''
         Use commit hash and reset local repo to that commit (use git reset instead of git checkout to remove detached head warning)
         '''
+        if not commit_hash:
+            raise Exception('Invalid Commit hash. Usually caused by assignment not being accepted before due date/time.')
         # run process on system that executes 'git reset' command. stdout is redirected so it doesn't output to end user
         # git reset is similar to checkout but doesn't care about detached heads and is more forceful
         checkout_process = subprocess.Popen(['git', 'reset', '--hard', commit_hash], cwd=self.__repo_path, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
