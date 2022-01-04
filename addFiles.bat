@@ -1,2 +1,0 @@
-python addFiles.py %*
-pause

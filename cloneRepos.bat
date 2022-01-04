@@ -1,2 +1,0 @@
-python cloneRepositories.py %*
-pause

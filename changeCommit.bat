@@ -1,2 +1,0 @@
-python changeCommit.py %*
-pause

@@ -1,2 +1,0 @@
-python renameRepos.py %*
-pause
