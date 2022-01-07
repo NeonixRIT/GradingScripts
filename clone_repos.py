@@ -27,6 +27,121 @@ WHITE = '\033[0m' # Ansi code for white to reset back to normal text
 AVG_INSERTIONS_DICT = dict() # Global dict that threads map repos to average lines of code per commit
 
 
+'''
+Possible exceptions caused by github/git
+'''
+class GithubException(Exception):
+    __slots__ = ['message']
+    
+    def __init__(self, message) -> None:
+        self.message = message
+
+
+class CloneException(GithubException):
+    def __init__(self, message) -> None:
+        super().__init__(message)
+
+
+class RevlistException(GithubException):
+    def __init__(self, message) -> None:
+        super().__init__(message)
+
+
+class CommitLogException(GithubException):
+    def __init__(self, message) -> None:
+        super().__init__(message)
+
+
+class RollbackException(GithubException):
+    def __init__(self, message) -> None:
+        super().__init__(message)
+
+
+'''
+Possible exceptions due to version incompatibility
+'''
+class CompatibilityException(Exception):
+    __slots__ = ['message']
+    
+    def __init__(self, message) -> None:
+        self.message = message
+
+
+class InvalidGitVersion(CompatibilityException):
+    def __init__(self, message) -> None:
+        super().__init__(message)
+        
+
+class GitNotFound(CompatibilityException):
+    def __init__(self, message) -> None:
+        super().__init__(message)
+
+
+class InvalidPyGithubVersion(CompatibilityException):
+    def __init__(self, message) -> None:
+        super().__init__(message)
+        
+
+class PyGithubNotFound(CompatibilityException):
+    def __init__(self, message) -> None:
+        super().__init__(message)
+        
+        
+class PipNotFound(CompatibilityException):
+    def __init__(self, message) -> None:
+        super().__init__(message)
+
+
+'''
+Possible exceptions due to user error
+'''
+class UserError(Exception):
+    __slots__ = ['message']
+    
+    def __init__(self, message) -> None:
+        self.message = message
+
+
+class InvalidAssignmentName(UserError):
+    def __init__(self, message) -> None:
+        super().__init__(message)
+
+
+class InvalidDate(UserError):
+    def __init__(self, message) -> None:
+        super().__init__(message)
+        
+
+class InvalidToken(UserError):
+    def __init__(self, message) -> None:
+        super().__init__(message)
+
+
+class InvalidTime(UserError):
+    def __init__(self, message) -> None:
+        super().__init__(message)
+     
+        
+class InvalidArguments(UserError):
+    def __init__(self, message = 'invalid number of arguments') -> None:
+        super().__init__(message)
+
+
+class ClassroomFileNotFound(UserError):
+    def __init__(self, message) -> None:
+        super().__init__(message)
+        
+
+class ConfigFileNotFound(UserError):
+    def __init__(self, message) -> None:
+        super().__init__(message)
+
+
+class OrganizationNotFound(UserError):
+    def __init__(self, message) -> None:
+        super().__init__(message)
+
+
 class AtomicCounter:
     '''
     Thread safe integer
@@ -606,124 +721,9 @@ def main():
         print() 
         try:
             print(f'{LIGHT_RED}{e.message}{WHITE}')
-        except TypeError:
+        except Exception:
             print(e)
 
 
 if __name__ == '__main__':
     main()
-
-
-'''
-Possible exceptions caused by github/git
-'''
-class GithubException(Exception):
-    __slots__ = ['message']
-    
-    def __init__(self, message) -> None:
-        self.message = message
-
-
-class CloneException(GithubException):
-    def __init__(self, message) -> None:
-        super().__init__(message)
-
-
-class RevlistException(GithubException):
-    def __init__(self, message) -> None:
-        super().__init__(message)
-
-
-class CommitLogException(GithubException):
-    def __init__(self, message) -> None:
-        super().__init__(message)
-
-
-class RollbackException(GithubException):
-    def __init__(self, message) -> None:
-        super().__init__(message)
-
-
-'''
-Possible exceptions due to version incompatibility
-'''
-class CompatibilityException(Exception):
-    __slots__ = ['message']
-    
-    def __init__(self, message) -> None:
-        self.message = message
-
-
-class InvalidGitVersion(CompatibilityException):
-    def __init__(self, message) -> None:
-        super().__init__(message)
-        
-
-class GitNotFound(CompatibilityException):
-    def __init__(self, message) -> None:
-        super().__init__(message)
-
-
-class InvalidPyGithubVersion(CompatibilityException):
-    def __init__(self, message) -> None:
-        super().__init__(message)
-        
-
-class PyGithubNotFound(CompatibilityException):
-    def __init__(self, message) -> None:
-        super().__init__(message)
-        
-        
-class PipNotFound(CompatibilityException):
-    def __init__(self, message) -> None:
-        super().__init__(message)
-
-
-'''
-Possible exceptions due to user error
-'''
-class UserError(Exception):
-    __slots__ = ['message']
-    
-    def __init__(self, message) -> None:
-        self.message = message
-
-
-class InvalidAssignmentName(UserError):
-    def __init__(self, message) -> None:
-        super().__init__(message)
-
-
-class InvalidDate(UserError):
-    def __init__(self, message) -> None:
-        super().__init__(message)
-        
-
-class InvalidToken(UserError):
-    def __init__(self, message) -> None:
-        super().__init__(message)
-
-
-class InvalidTime(UserError):
-    def __init__(self, message) -> None:
-        super().__init__(message)
-     
-        
-class InvalidArguments(UserError):
-    def __init__(self, message = 'invalid number of arguments') -> None:
-        super().__init__(message)
-
-
-class ClassroomFileNotFound(UserError):
-    def __init__(self, message) -> None:
-        super().__init__(message)
-        
-
-class ConfigFileNotFound(UserError):
-    def __init__(self, message) -> None:
-        super().__init__(message)
-
-
-class OrganizationNotFound(UserError):
-    def __init__(self, message) -> None:
-        super().__init__(message)

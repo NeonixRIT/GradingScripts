@@ -134,7 +134,7 @@ def main():
         print() 
         try:
             print(f'{LIGHT_RED}{e.message}{WHITE}')
-        except (TypeError, AttributeError, ValueError):
+        except Exception:
             print(e)
 
 
