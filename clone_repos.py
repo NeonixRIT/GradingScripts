@@ -4,10 +4,11 @@ import os
 import re
 import subprocess
 import threading
+import time
 
 from datetime import date, datetime
 from github import Github, BadCredentialsException, UnknownObjectException
-from github.Organization import Organization
+from github.PaginatedList import PaginatedList
 from github.Repository import Repository
 from pathlib import Path
 '''
@@ -175,7 +176,7 @@ class RepoHandler(threading.Thread):
 
     Each thread only clones one repo.
     '''
-    __slots___ = ['__repo', '__assignment_name', '__date_due', '__time_due', '__students', '__student_filename', '__initial_path', '__repo_path', '__token']
+    __slots___ = ['__repo', '__assignment_name', '__date_due', '__time_due', '__students', '__student_filename', '__initial_path', '__repo_path', '__token', '__new_repo_name']
 
 
     def __init__(self, repo: Repository, assignment_name: str, date_due: str, time_due: str, students: dict, student_filename: str, initial_path: Path, token: str):
@@ -186,8 +187,9 @@ class RepoHandler(threading.Thread):
         self.__students = students
         self.__student_filename = student_filename
         self.__initial_path = initial_path
+        self.__new_repo_name = get_new_repo_name(self.__repo, self.__students, self.__assignment_name)
         if self.__student_filename: # If a classroom roster is used, replace github name with real name
-            self.__repo_path = self.__initial_path / get_new_repo_name(self.__repo, self.__students, self.__assignment_name) # replace repo name when cloning to have student's real name
+            self.__repo_path = self.__initial_path / self.__new_repo_name # replace repo name when cloning to have student's real name
         else:
             self.__repo_path = self.__initial_path / self.__repo.name
         self.__token = token
@@ -301,7 +303,7 @@ class RepoHandler(threading.Thread):
             # Calc avg and place in global dictionary using maped repo name if student roster is provided or normal repo name
             average_insertions = round(total_insertions / total_commits, 2)
             if self.__student_filename: # If using a classroom roster, replace repo name in avgLinesInserted.txt w/ student name
-                AVG_INSERTIONS_DICT[get_new_repo_name(self.__repo, self.__students, self.__assignment_name)] = average_insertions
+                AVG_INSERTIONS_DICT[self.__new_repo_name] = average_insertions
             else: # else use default repo name
                 AVG_INSERTIONS_DICT[self.__repo.name] = average_insertions
         except Exception:
@@ -339,27 +341,27 @@ def build_init_path(outdir: Path, assignment_name: str, date, time) -> Path:
     init_path = outdir / f'{assignment_name}{date_str}_{time_str}'
     
     index = 1
-    if Path(init_path).exists():
+    if init_path.exists():
         new_path = Path(f'{init_path}_iter_{index}')
-        while Path(new_path).exists():
+        while new_path.exists():
             index += 1
             new_path = Path(f'{init_path}_iter_{index}')
-        return Path(new_path)
-    return Path(init_path)
+        return new_path
+    return init_path
     
 
-def get_repos(assignment_name: str, github_org_client: Organization) -> list:
+def get_repos(assignment_name: str, org_repos: PaginatedList) -> list:
     '''
     return list of all repos in an organization matching assignment name prefix
     '''
-    return [repo for repo in github_org_client.get_repos() if repo.name.startswith(assignment_name)]
+    return [repo for repo in org_repos if repo.name.startswith(assignment_name)]
 
 
-def get_repos_specified_students(assignment_name: str, github_org_client: Organization, students: list) -> list:
+def get_repos_specified_students(assignment_name: str, org_repos: PaginatedList, students: list) -> list:
     '''
     return list of all repos in an organization matching assignment name prefix and is a student specified in the specified class roster csv
     '''  
-    return [repo for repo in github_org_client.get_repos() if repo.name.startswith(assignment_name) and is_student(repo, students, assignment_name) == True]
+    return [repo for repo in org_repos if repo.name.startswith(assignment_name) and is_student(repo, students, assignment_name)]
 
 
 def get_students(student_filename: str) -> dict:
@@ -375,7 +377,7 @@ def get_students(student_filename: str) -> dict:
             csv_reader = csv.reader(f_handle) # Use csv reader to separate values into a list
             next(csv_reader) # skip header line
             for student in csv_reader:
-                name = re.sub(r'[. ]', '', re.sub(r'(, )|(,)', '-', student[0]).split(' ')[0])
+                name = re.sub(r'([.]\s?|[,]\s?|\s)', '-', student[0]).rstrip(r'-')
                 github = student[1]
                 if name and github: # if csv contains student name and github username, map them to each other
                     students[github] = name
@@ -714,6 +716,13 @@ def print_end_report(students: dict, repos: list, len_not_accepted, cloned_num: 
     
     lines_str = f'{LIGHT_GREEN}{lines_written}{WHITE}' if lines_written == len(repos) else f'{LIGHT_RED}{lines_written}{WHITE}'
     print(f'{LIGHT_GREEN}Found average lines per commit for {lines_str}{LIGHT_GREEN}/{len(repos)} repos.{WHITE}')
+    
+    
+def log_timing_report(timings: dict):
+    logging.info('*** Start Timing report ***')
+    for key in timings.keys():
+        logging.info(f'    {key}:'.ljust(34) + str(round(timings[key], 3)))
+    logging.info('*** End Timing report ***')
 
 
 rollback_counter = AtomicCounter()
@@ -724,6 +733,29 @@ def main():
     '''
     Main function
     '''
+    
+    '''Timing Variables'''
+    git_check_time = 0
+    pygit_check_time = 0
+    read_config_time = 0
+    make_client_time = 0
+    preamble_total_time = 0
+    
+    preamble2_total_time = 0
+    get_repos_time = 0
+    get_students_time = 0
+    get_repos_w_students_time = 0
+    get_repos_wo_students_time = 0
+    simple_checks_time = 0
+    make_init_time = 0
+    find_not_accepted_time = 0
+    
+    run_threads_time = 0
+    
+    end_time = 0
+    
+    total_time = 0
+    
     # Enable color in cmd
     if is_windows():
         os.system('color')
@@ -732,15 +764,25 @@ def main():
 
     # Try catch catches errors and sends them to the log file instead of outputting to console
     try:
+        beginning_start = time.perf_counter()
         # Check local git version is compatible with script
         check_git_version()
+        git_check_time = time.perf_counter() - beginning_start
         # Check local PyGithub module version is compatible with script
+        pygit_check_start = time.perf_counter()
         check_pygithub_version()
+        pygit_check_time = time.perf_counter() - pygit_check_start
         # Read config file, if doesn't exist make one using user input.
+        read_config_start = time.perf_counter()
         token, organization, use_classlist, student_filename, output_dir = read_config()
+        read_config_time = time.perf_counter() - read_config_start
 
         # Create Organization to access repos, raise errors if invalid token/org
+        make_client_start = time.perf_counter()
         git_org_client = attempt_make_client(token, organization, use_classlist, student_filename, output_dir)
+        make_client_time = time.perf_counter() - make_client_start
+        org_repos = git_org_client.get_repos()
+        preamble_total_time = time.perf_counter() - beginning_start
 
         # Variables used to get proper repos
         assignment_name = attempt_get_assignment()
@@ -748,23 +790,36 @@ def main():
         time_due = get_time()
         print() # new line for formatting reasons
 
+        get_repos_start = time.perf_counter()
         # If student roster is specified, get repos list using proper function
         students = dict() # student dict variable do be used im main scope
         if student_filename: # if classroom roster is specified use it
+            get_students_start = time.perf_counter()
             students = get_students(student_filename) # fill student dict
-            repos = get_repos_specified_students(assignment_name, git_org_client, students)
+            get_students_time = time.perf_counter() - get_students_start
+            get_repos_w_students_start = time.perf_counter()
+            repos = get_repos_specified_students(assignment_name, org_repos, students)
+            get_repos_w_students_time = time.perf_counter() - get_repos_w_students_start
         else:
-            repos = get_repos(assignment_name, git_org_client)
+            get_repos_wo_students_start = time.perf_counter()
+            repos = get_repos(assignment_name, org_repos)
+            get_repos_wo_students_time = time.perf_counter() - get_repos_wo_students_start
+        get_repos_time = time.perf_counter() - get_repos_start
 
+        simple_checks_start = time.perf_counter()
         check_time(time_due)
         check_date(date_due)
         check_assignment_name(repos)
+        simple_checks_time = time.perf_counter() - simple_checks_start
         # Sets path to output directory inside assignment folder where repos will be cloned.
         # Makes parent folder for whole assignment.
+        make_init_start = time.perf_counter()
         initial_path = build_init_path(output_dir, assignment_name, date_due, time_due)  
         os.mkdir(initial_path)
+        make_init_time = time.perf_counter() - make_init_start
 
         # Print and log students that have not accepted assignment
+        find_not_accepted_start = time.perf_counter()
         not_accepted = find_students_not_accepted(students, repos, assignment_name)
         for student in not_accepted:
             print(f'{LIGHT_RED}`{students[student]}` ({student}) did not accept the assignment.{WHITE}')
@@ -772,7 +827,10 @@ def main():
         
         if len(not_accepted) != 0:
             print()
-            
+        find_not_accepted_time = time.perf_counter() - find_not_accepted_start
+        preamble2_total_time = time.perf_counter() - get_repos_start
+        
+        run_threads_start = time.perf_counter()
         threads = []
         # goes through list of repos and clones them into the assignment's parent folder
         for repo in repos:
@@ -789,8 +847,33 @@ def main():
         for thread in threads:
             thread.join()
 
+        run_threads_time = time.perf_counter() - run_threads_start
+        
+        end_start = time.perf_counter()
         num_of_lines = write_avg_insersions_file(initial_path, assignment_name)
         print_end_report(students, repos, len(not_accepted), cloned_counter.value, rollback_counter.value, num_of_lines)
+        end_time = time.perf_counter() - end_start
+        total_time = time.perf_counter() - beginning_start
+        
+        timing_dict = {
+            'Check Github Version': git_check_time,
+            'Check PyGithub Version': pygit_check_time,
+            'Read Config File': read_config_time,
+            'Make Github Client': make_client_time,
+            'Preamble 1 Time': preamble_total_time,
+            'Build Students Dict': get_students_time,
+            'Get Repos w/ Students': get_repos_w_students_time,
+            'Get Repos w/o Students': get_repos_wo_students_time,
+            'Get Repos Total': get_repos_time,
+            'Simple Checks': simple_checks_time,
+            'Make Initial Directory': make_init_time,
+            'Find Not Accepted Students': find_not_accepted_time,
+            'Preamble 2 Time': preamble2_total_time,
+            'Handle All Repos Time': run_threads_time,
+            'End Time': end_time,
+            'Total Time': total_time
+                       }
+        log_timing_report(timing_dict)
     except Exception as e:
         logging.warning(e)
         print() 

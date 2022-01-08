@@ -1,14 +1,8 @@
 import logging
 import os
 import sys
-
-from clone_repos import RepoHandler, InvalidArguments, check_git_version, check_pygithub_version, read_config, \
-        MAX_THREADS, LOG_FILE_PATH, WHITE, LIGHT_GREEN, LIGHT_RED, write_avg_insersions_file, get_repos, get_students, \
-        get_repos_specified_students, build_init_path, is_windows, check_time, check_date, check_assignment_name, \
-        find_students_not_accepted, rollback_counter, cloned_counter, print_end_report
-
-from github import Github
-from pathlib import Path
+import clone_repos as rh
+import pathlib as path
 
 
 def print_help():
@@ -25,7 +19,7 @@ def parse_args(args: list):
             print_help()
             input('Press return key to exit...')
             exit()
-        raise InvalidArguments()
+        raise rh.InvalidArguments()
     assignment_name = args[1]
     date_due = args[2]
     time_due = args[3]
@@ -36,21 +30,21 @@ def parse_args(args: list):
         out_folder = args[4]
 
     if len(args) > 5:
-        raise InvalidArguments()
+        raise rh.InvalidArguments()
         
     return assignment_name, date_due, time_due, out_folder
 
 
-def build_init_path_given_out(output_dir: Path, out_folder: str):
+def build_init_path_given_out(output_dir: path.Path, out_folder: str):
     init_path = output_dir / out_folder
     index = 1
-    if Path(init_path).exists():
-        new_path = Path(f'{init_path}_iter_{index}')
-        while Path(new_path).exists():
+    if path.Path(init_path).exists():
+        new_path = path.Path(f'{init_path}_iter_{index}')
+        while path.Path(new_path).exists():
             index += 1
-            new_path = Path(f'{init_path}_iter_{index}')
-        return Path(new_path)
-    return Path(init_path)
+            new_path = path.Path(f'{init_path}_iter_{index}')
+        return path.Path(new_path)
+    return path.Path(init_path)
 
 
 def main():
@@ -58,37 +52,38 @@ def main():
     Main function
     '''
     # Enable color in cmd
-    if is_windows():
+    if rh.is_windows():
         os.system('color')
     # Create log file
-    logging.basicConfig(level=logging.INFO, filename=LOG_FILE_PATH)
+    logging.basicConfig(level=logging.INFO, filename=rh.LOG_FILE_PATH)
 
     # Try catch catches errors and sends them to the log file instead of outputting to console
     try:
         assignment_name, date_due, time_due, out_folder = parse_args(sys.argv)
         # Check local git version is compatible with script
-        check_git_version()
+        rh.check_git_version()
         # Check local PyGithub module version is compatible with script
-        check_pygithub_version()
+        rh.check_pygithub_version()
         # Read config file, if doesn't exist make one using user input.
-        token, organization, student_filename, output_dir = read_config()
+        token, organization, use_classlist, student_filename, output_dir = rh.read_config()
 
         # Create Organization to access repos
-        git_org_client = Github(token.strip(), pool_size = MAX_THREADS).get_organization(organization.strip())
+        git_org_client = rh.attempt_make_client(token, organization, use_classlist, student_filename, output_dir)
+        org_repos = git_org_client.get_repos()
 
         students = dict() # student dict variable do be used im main scope
         if student_filename: # if classroom roster is specified use it
-            students = get_students(student_filename) # fill student dict
-            repos = get_repos_specified_students(assignment_name, git_org_client, students)
+            students = rh.get_students(student_filename) # fill student dict
+            repos = rh.get_repos_specified_students(assignment_name, org_repos, students)
         else:
-            repos = get_repos(assignment_name, git_org_client)
+            repos = rh.get_repos(assignment_name, org_repos)
 
-        check_time(time_due)
-        check_date(date_due)
-        check_assignment_name(repos)
+        rh.check_time(time_due)
+        rh.check_date(date_due)
+        rh.check_assignment_name(repos)
         # Sets path to output directory inside assignment folder where repos will be cloned.
         # Makes parent folder for whole assignment.
-        initial_path = build_init_path(output_dir, assignment_name, date_due, time_due)  
+        initial_path = rh.build_init_path(output_dir, assignment_name, date_due, time_due)  
 
         if out_folder:
             initial_path = build_init_path_given_out(output_dir, out_folder)
@@ -96,9 +91,9 @@ def main():
         os.mkdir(initial_path)
 
         # Print and log students that have not accepted assignment
-        not_accepted = find_students_not_accepted(students, repos, assignment_name)
+        not_accepted = rh.find_students_not_accepted(students, repos, assignment_name)
         for student in not_accepted:
-            print(f'{LIGHT_RED}`{students[student]}` ({student}) did not accept the assignment.{WHITE}')
+            print(f'{rh.LIGHT_RED}`{students[student]}` ({student}) did not accept the assignment.{rh.WHITE}')
             logging.info(f'{students[student]}` ({student}) did not accept the assignment `{assignment_name}` by the due date/time.')
         print()
             
@@ -107,7 +102,7 @@ def main():
         for repo in repos:
             # Create thread to handle repos and add to thread list
             # Each thread clones a repo, sets it back to due date/time, and gets avg lines per commit
-            thread = RepoHandler(repo, assignment_name, date_due, time_due, students, bool(student_filename), initial_path, token)
+            thread = rh.RepoHandler(repo, assignment_name, date_due, time_due, students, bool(student_filename), initial_path, token)
             threads += [thread]
 
         # Run all clone threads
@@ -118,13 +113,13 @@ def main():
         for thread in threads:
             thread.join()
 
-        num_of_lines = write_avg_insersions_file(initial_path, assignment_name)
-        print_end_report(students, repos, len(not_accepted), cloned_counter.value, rollback_counter.value, num_of_lines)
+        num_of_lines = rh.write_avg_insersions_file(initial_path, assignment_name)
+        rh.print_end_report(students, repos, len(not_accepted), rh.cloned_counter.value, rh.rollback_counter.value, num_of_lines)
     except Exception as e:
         logging.error(e)
         print() 
         try:
-            print(f'{LIGHT_RED}{e.message}{WHITE}')
+            print(f'{rh.LIGHT_RED}{e.message}{rh.WHITE}')
         except Exception:
             print(e)
 
