@@ -697,6 +697,9 @@ def attempt_make_client(token: str, organization: str, use_classlist: bool, stud
 
 
 def print_end_report(students: dict, repos: list, len_not_accepted, cloned_num: int, rollback_num: int, lines_written: int):
+    '''
+    Give end-user somewhat detailed report of what repos were able to be cloned, how many students accepted the assignments, etc.
+    '''
     print()
     print(f'{LIGHT_GREEN}Done.{WHITE}')
     
