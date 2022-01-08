@@ -511,6 +511,9 @@ def check_git_version():
 
 
 def pyversion_short(subprocess: subprocess.Popen):
+    '''
+    Error logic for alternate pip commands when trying to find pyversion.
+    '''
     with subprocess:
         for line in iter(subprocess.stdout.readline, b''): # b'\n'-separated lines
             line = line.decode().lower()
@@ -521,6 +524,9 @@ def pyversion_short(subprocess: subprocess.Popen):
             
             
 def try_alt_pygithub_check():
+    '''
+    Attempt alternate commands to find proper pygithub version
+    '''
     try:
         if is_windows():
             check_pygithub_version_process = subprocess.Popen(['python', '-m','pip', 'show', 'pygithub'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
