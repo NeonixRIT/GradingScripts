@@ -1,5 +1,4 @@
 # Local Project Files for Testing/Debugging
-tmp/classroom_roster_full.csv
-tmp/classroom_roster.csv
 tmp/config.txt
-tmp/classroom_roster_full_full.csv
+tmp/old_rosters
+tmp/rosters

@@ -2,7 +2,11 @@ import logging
 import os
 import sys
 
-from clone_repos import RepoHandler, InvalidArguments, check_git_version, check_pygithub_version, read_config, MAX_THREADS, LOG_FILE_PATH, WHITE, LIGHT_GREEN, LIGHT_RED, write_avg_insersions_file, get_repos, get_students, get_repos_specified_students, build_init_path, is_windows, check_time, check_date, check_assignment_name, find_students_not_accepted, rollback_counter, cloned_counter
+from clone_repos import RepoHandler, InvalidArguments, check_git_version, check_pygithub_version, read_config, \
+        MAX_THREADS, LOG_FILE_PATH, WHITE, LIGHT_GREEN, LIGHT_RED, write_avg_insersions_file, get_repos, get_students, \
+        get_repos_specified_students, build_init_path, is_windows, check_time, check_date, check_assignment_name, \
+        find_students_not_accepted, rollback_counter, cloned_counter, print_end_report
+
 from github import Github
 from pathlib import Path
 
@@ -115,20 +119,7 @@ def main():
             thread.join()
 
         num_of_lines = write_avg_insersions_file(initial_path, assignment_name)
-        print()
-        print(f'{LIGHT_GREEN}Done.{WHITE}')
-        
-        accept_str = f'{LIGHT_GREEN}{len(students)}{WHITE}' if len(not_accepted) == 0 else f'{LIGHT_RED}{len(students) - len(not_accepted)}{WHITE}'
-        print(f'{LIGHT_GREEN}{accept_str}{LIGHT_GREEN}/{len(students)} accepted the assignment.{WHITE}')
-        
-        clone_str = f'{LIGHT_GREEN}{cloned_counter.value}{WHITE}' if cloned_counter.value == len(repos) else f'{LIGHT_RED}{cloned_counter.value}{WHITE}'
-        print(f'{LIGHT_GREEN}Cloned {clone_str}{LIGHT_GREEN}/{len(repos)} repos.{WHITE}')
-        
-        rollback_str = f'{LIGHT_GREEN}{rollback_counter.value}{WHITE}' if rollback_counter.value == len(repos) else f'{LIGHT_RED}{rollback_counter.value}{WHITE}'
-        print(f'{LIGHT_GREEN}Rolled Back {rollback_str}{LIGHT_GREEN}/{len(repos)} repos.{WHITE}')
-        
-        lines_str = f'{LIGHT_GREEN}{num_of_lines}{WHITE}' if num_of_lines == len(repos) else f'{LIGHT_RED}{num_of_lines}{WHITE}'
-        print(f'{LIGHT_GREEN}Found average lines per commit for {lines_str}{LIGHT_GREEN}/{len(repos)} repos.{WHITE}')
+        print_end_report(students, repos, len(not_accepted), cloned_counter.value, rollback_counter.value, num_of_lines)
     except Exception as e:
         logging.error(e)
         print() 

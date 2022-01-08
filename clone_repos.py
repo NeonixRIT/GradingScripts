@@ -57,6 +57,11 @@ class RollbackException(GithubException):
         super().__init__(message)
 
 
+class ClientException(GithubException):
+    def __init__(self, message) -> None:
+        super().__init__(message)
+     
+        
 '''
 Possible exceptions due to version incompatibility
 '''
@@ -400,7 +405,7 @@ def is_student(repo: Repository, students: dict) -> bool:
     return False
 
 
-def save_config(token: str, organization: Organization, use_classlist: bool, student_filename: str, output_dir: Path):
+def save_config(token: str, organization: str, use_classlist: bool, student_filename: str, output_dir: Path):
     '''
     Save parameters into config file to be read on future runs
     '''
@@ -465,7 +470,7 @@ def read_config() -> tuple:
     else:
         make_default_config()
         token, organization, use_classlist, student_filename, output_dir = read_config_raw() # Update return variables
-    return (token, organization, student_filename, output_dir)
+    return (token, organization, use_classlist, student_filename, output_dir)
 
 
 def make_default_config():
@@ -552,7 +557,7 @@ def check_pygithub_version():
             raise PyGithubNotFound('PyGithub not found. Please install the latest version using pip. Make sure it is for the version of python you are trying to run the script from.')
 
 
-def write_avg_insersions_file(initial_path, assignment_name):
+def write_avg_insersions_file(initial_path: Path, assignment_name: str):
     '''
     Loop through average insertions dict created by CloneRepoThreads and write to file in assignment dir
     '''
@@ -590,17 +595,11 @@ def check_assignment_name(repos: str):
     if not repos:
         raise InvalidAssignmentName('Assignment doesn\'t exist.')
     
-    
-def attempt_make_client(token: str, organization: str):
-    try:
-        return Github(token.strip(), pool_size = MAX_THREADS).get_organization(organization.strip())
-    except BadCredentialsException:
-        raise InvalidToken('Invalid token provided.')
-    except UnknownObjectException:
-        raise OrganizationNotFound('Organization not found')
-    
 
 def attempt_get_assignment():
+    '''
+    Get assignment name from input. Does not accept empty input.
+    '''
     assignment_name = input('Assignment Name: ') # get assignment name (repo prefix)
     while not assignment_name: # if input is empty ask again
         assignment_name = input('Please input an assignment name: ')
@@ -608,6 +607,9 @@ def attempt_get_assignment():
 
 
 def get_time():
+    '''
+    Get assignment due time from input.
+    '''
     time_due = input('Time Due (24hr, press `enter` for current): ') # get time assignment was due
     if not time_due: # if time due is blank use current time
         current_time = datetime.now() # get current time
@@ -617,6 +619,9 @@ def get_time():
 
 
 def get_date():
+    '''
+    Get assignment due date from input.
+    '''
     date_due = input('Date Due (format = yyyy-mm-dd, press `enter` for current): ') # get due date
     if not date_due: # If due date is blank use current date
         current_date = date.today() # get current date
@@ -625,10 +630,84 @@ def get_date():
     return date_due
 
 
-def find_students_not_accepted(students, repos, assignment_name):
+def find_students_not_accepted(students: dict, repos: list, assignment_name: str) -> set:
+    '''
+    Find students who are on the class list but did not have their repos cloned
+    '''
     students_keys = set(students.keys())
     accepted = {repo.name.replace(f'{assignment_name}-', '') for repo in repos}
     return students_keys ^ accepted
+
+
+def update_organization(token: str, use_classlist: bool, student_filename: str, output_dir: Path) -> tuple:
+    '''
+    Update organization name in config.txt file. Returns updated config.
+    '''
+    new_organization = input('New Github Organization name: ')
+    save_config(token, new_organization, use_classlist, student_filename, output_dir)
+    return (token, new_organization, use_classlist, student_filename, output_dir)
+    
+    
+def update_token(organization: str, use_classlist: bool, student_filename: str, output_dir: Path) -> tuple:
+    '''
+    Update token string in config.txt file. Return updated config.
+    '''
+    new_token = input('New Github O-Auth token: ')
+    save_config(new_token, organization, use_classlist, student_filename, output_dir)
+    return (new_token, organization, use_classlist, student_filename, output_dir)
+
+
+def prompt_invalid_tok_org(exception: Exception, token: str, organization: str, use_classlist: bool, student_filename: str, output_dir: Path) -> tuple:
+    '''
+    Prompt user and attempt to fix invalid tokens/organizations in config.txt
+    '''
+    ex_type = type(exception)    
+    prompt_str = 'O-Auth token' if ex_type is BadCredentialsException else 'Organization name'
+    
+    logging.warning(f'Invalid {prompt_str}.')
+    print(f'{LIGHT_RED}Invalid {prompt_str}.{WHITE}')
+    response = input(f'Would you like to update your {prompt_str} in config.txt? (Y/N): ')
+    if response.lower() == 'y' or response.lower() == 'yes':
+        if ex_type == BadCredentialsException:
+            return update_token(organization, use_classlist, student_filename, output_dir)
+        elif ex_type == UnknownObjectException:
+            return update_organization(token, use_classlist, student_filename, output_dir)
+    else:
+        exit()
+            
+            
+def attempt_make_client(token: str, organization: str, use_classlist: bool, student_filename: str, output_dir: Path):
+    '''
+    Attempts to make and return github client for the organization to get repo information with.
+    Attempts to fix invalid organization/token issues and gives repeated attempts for other issues.
+    '''
+    attempts = 0
+    while attempts < 5:
+        try:
+            return Github(token.strip(), pool_size = MAX_THREADS).get_organization(organization.strip())
+        except (BadCredentialsException, UnknownObjectException) as e:
+            token, organization, use_classlist, student_filename, output_dir = prompt_invalid_tok_org(e, token, organization, use_classlist, student_filename, output_dir)
+        except Exception as e:
+            logging.warning(e)
+        attempts += 1
+    raise ClientException('Unable to Create Github Client.')
+
+
+def print_end_report(students: dict, repos: list, len_not_accepted, cloned_num: int, rollback_num: int, lines_written: int):
+    print()
+    print(f'{LIGHT_GREEN}Done.{WHITE}')
+    
+    accept_str = f'{LIGHT_GREEN}{len(students)}{WHITE}' if len_not_accepted == 0 else f'{LIGHT_RED}{len(students) - len_not_accepted}{WHITE}'
+    print(f'{LIGHT_GREEN}{accept_str}{LIGHT_GREEN}/{len(students)} accepted the assignment.{WHITE}')
+    
+    clone_str = f'{LIGHT_GREEN}{cloned_num}{WHITE}' if cloned_num == len(repos) else f'{LIGHT_RED}{cloned_num}{WHITE}'
+    print(f'{LIGHT_GREEN}Cloned {clone_str}{LIGHT_GREEN}/{len(repos)} repos.{WHITE}')
+    
+    rollback_str = f'{LIGHT_GREEN}{rollback_num}{WHITE}' if rollback_num == len(repos) else f'{LIGHT_RED}{rollback_num}{WHITE}'
+    print(f'{LIGHT_GREEN}Rolled Back {rollback_str}{LIGHT_GREEN}/{len(repos)} repos.{WHITE}')
+    
+    lines_str = f'{LIGHT_GREEN}{lines_written}{WHITE}' if lines_written == len(repos) else f'{LIGHT_RED}{lines_written}{WHITE}'
+    print(f'{LIGHT_GREEN}Found average lines per commit for {lines_str}{LIGHT_GREEN}/{len(repos)} repos.{WHITE}')
 
 
 rollback_counter = AtomicCounter()
@@ -651,10 +730,10 @@ def main():
         # Check local PyGithub module version is compatible with script
         check_pygithub_version()
         # Read config file, if doesn't exist make one using user input.
-        token, organization, student_filename, output_dir = read_config()
+        token, organization, use_classlist, student_filename, output_dir = read_config()
 
         # Create Organization to access repos, raise errors if invalid token/org
-        git_org_client = attempt_make_client(token, organization)
+        git_org_client = attempt_make_client(token, organization, use_classlist, student_filename, output_dir)
 
         # Variables used to get proper repos
         assignment_name = attempt_get_assignment()
@@ -702,20 +781,7 @@ def main():
             thread.join()
 
         num_of_lines = write_avg_insersions_file(initial_path, assignment_name)
-        print()
-        print(f'{LIGHT_GREEN}Done.{WHITE}')
-        
-        accept_str = f'{LIGHT_GREEN}{len(students)}{WHITE}' if len(not_accepted) == 0 else f'{LIGHT_RED}{len(students) - len(not_accepted)}{WHITE}'
-        print(f'{LIGHT_GREEN}{accept_str}{LIGHT_GREEN}/{len(students)} accepted the assignment.{WHITE}')
-        
-        clone_str = f'{LIGHT_GREEN}{cloned_counter.value}{WHITE}' if cloned_counter.value == len(repos) else f'{LIGHT_RED}{cloned_counter.value}{WHITE}'
-        print(f'{LIGHT_GREEN}Cloned {clone_str}{LIGHT_GREEN}/{len(repos)} repos.{WHITE}')
-        
-        rollback_str = f'{LIGHT_GREEN}{rollback_counter.value}{WHITE}' if rollback_counter.value == len(repos) else f'{LIGHT_RED}{rollback_counter.value}{WHITE}'
-        print(f'{LIGHT_GREEN}Rolled Back {rollback_str}{LIGHT_GREEN}/{len(repos)} repos.{WHITE}')
-        
-        lines_str = f'{LIGHT_GREEN}{num_of_lines}{WHITE}' if num_of_lines == len(repos) else f'{LIGHT_RED}{num_of_lines}{WHITE}'
-        print(f'{LIGHT_GREEN}Found average lines per commit for {lines_str}{LIGHT_GREEN}/{len(repos)} repos.{WHITE}')
+        print_end_report(students, repos, len(not_accepted), cloned_counter.value, rollback_counter.value, num_of_lines)
     except Exception as e:
         logging.warning(e)
         print() 
