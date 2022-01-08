@@ -149,7 +149,7 @@ class OrganizationNotFound(UserError):
 
 class AtomicCounter:
     '''
-    Thread safe integer
+    Simple Thread safe integer
     '''
     __slots__ = ['value', '_lock']
     
@@ -282,6 +282,7 @@ class RepoHandler(threading.Thread):
             log_process = subprocess.Popen(['git', 'log', '--oneline', '--shortstat'], cwd=self.__repo_path, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
             # Loop through response line by line
             repo_stats = [] # list to store each commits insertion number
+            total_insertions = 0
             with log_process:
                 for line in iter(log_process.stdout.readline, b''): # b'\n'-separated lines
                     line = line.decode()
@@ -291,14 +292,11 @@ class RepoHandler(threading.Thread):
                         # [0] = files changed
                         # [1] = insertions
                         # [2] = deletions (if any, might not be an index)
-                        repo_stats.append([re.sub(r'\D', '', value) for value in line.strip().split(', ')])
+                        stat_entry = [re.sub(r'\D', '', value) for value in line.strip().split(', ')]
+                        repo_stats.append(stat_entry)
+                        total_insertions += int(stat_entry[1])
 
             total_commits = len(repo_stats) # each index in repo_stats should be a commit
-            total_insertions = 0
-            # Loop through repos stats and find total number of insertions
-            for i in range(total_commits):
-                insertions = int(repo_stats[i][1])
-                total_insertions += insertions
 
             # Calc avg and place in global dictionary using maped repo name if student roster is provided or normal repo name
             average_insertions = round(total_insertions / total_commits, 2)
@@ -361,7 +359,7 @@ def get_repos_specified_students(assignment_name: str, github_org_client: Organi
     '''
     return list of all repos in an organization matching assignment name prefix and is a student specified in the specified class roster csv
     '''  
-    return [repo for repo in github_org_client.get_repos() if repo.name.startswith(assignment_name) and is_student(repo, students) == True]
+    return [repo for repo in github_org_client.get_repos() if repo.name.startswith(assignment_name) and is_student(repo, students, assignment_name) == True]
 
 
 def get_students(student_filename: str) -> dict:
@@ -390,17 +388,16 @@ def get_new_repo_name(repo: Repository, students: dict, assignment_name: str) ->
     '''
     Returns repo name replacing github username sufix with student's real name
     '''
-    for student in students:
-        if student in repo.name:
-            return f'{assignment_name}-{students[student]}'
+    student_github = repo.name.replace(f'{assignment_name}-', '')
+    return f'{assignment_name}-{students[student_github]}'
 
 
-def is_student(repo: Repository, students: dict) -> bool:
+def is_student(repo: Repository, students: dict, assignment_name: str) -> bool:
     '''
     Check if repo belongs to one of the students in specified class roster
     '''
-    for student in students:
-        if student in repo.name:
+    student_github = repo.name.replace(f'{assignment_name}-', '')
+    if student_github in students:
             return True
     return False
 
@@ -713,6 +710,7 @@ def print_end_report(students: dict, repos: list, len_not_accepted, cloned_num: 
 rollback_counter = AtomicCounter()
 cloned_counter = AtomicCounter()
 
+
 def main():
     '''
     Main function
@@ -762,7 +760,9 @@ def main():
         for student in not_accepted:
             print(f'{LIGHT_RED}`{students[student]}` ({student}) did not accept the assignment.{WHITE}')
             logging.info(f'{students[student]}` ({student}) did not accept the assignment `{assignment_name}` by the due date/time.')
-        print()
+        
+        if len(not_accepted) != 0:
+            print()
             
         threads = []
         # goes through list of repos and clones them into the assignment's parent folder
