@@ -7,6 +7,7 @@ import threading
 import time
 
 from datetime import date, datetime
+from typing import Iterable
 from github import Github, BadCredentialsException, UnknownObjectException
 from github.PaginatedList import PaginatedList
 from github.Repository import Repository
@@ -350,18 +351,20 @@ def build_init_path(outdir: Path, assignment_name: str, date, time) -> Path:
     return init_path
     
 
-def get_repos(assignment_name: str, org_repos: PaginatedList) -> list:
+def get_repos(assignment_name: str, org_repos: PaginatedList) -> Iterable:
     '''
-    return list of all repos in an organization matching assignment name prefix
+    generator for all repos in an organization matching assignment name prefix
     '''
-    return [repo for repo in org_repos if repo.name.startswith(assignment_name)]
+    for repo in org_repos:
+        if repo.name.startswith(assignment_name):
+            yield repo
 
 
-def get_repos_specified_students(assignment_name: str, org_repos: PaginatedList, students: list) -> list:
+def get_repos_specified_students(assignment_repos: Iterable, students: dict) -> set:
     '''
     return list of all repos in an organization matching assignment name prefix and is a student specified in the specified class roster csv
-    '''  
-    return [repo for repo in org_repos if repo.name.startswith(assignment_name) and is_student(repo, students, assignment_name)]
+    '''
+    return set(filter(lambda repo: repo.name.split('-')[-1] in students, assignment_repos))
 
 
 def get_students(student_filename: str) -> dict:
@@ -392,16 +395,6 @@ def get_new_repo_name(repo: Repository, students: dict, assignment_name: str) ->
     '''
     student_github = repo.name.replace(f'{assignment_name}-', '')
     return f'{assignment_name}-{students[student_github]}'
-
-
-def is_student(repo: Repository, students: dict, assignment_name: str) -> bool:
-    '''
-    Check if repo belongs to one of the students in specified class roster
-    '''
-    student_github = repo.name.replace(f'{assignment_name}-', '')
-    if student_github in students:
-            return True
-    return False
 
 
 def save_config(token: str, organization: str, use_classlist: bool, student_filename: str, output_dir: Path):
@@ -718,10 +711,12 @@ def print_end_report(students: dict, repos: list, len_not_accepted, cloned_num: 
     print(f'{LIGHT_GREEN}Found average lines per commit for {lines_str}{LIGHT_GREEN}/{len(repos)} repos.{WHITE}')
     
     
-def log_timing_report(timings: dict):
+def log_timing_report(timings: dict, assignment_name:str):
     logging.info('*** Start Timing report ***')
+    logging.info(f'    Assignment:'.ljust(34) + assignment_name)
     for key in timings.keys():
-        logging.info(f'    {key}:'.ljust(34) + str(round(timings[key], 3)))
+        prefix = f'    {key}:'.ljust(34)
+        logging.info(f'{prefix}{str(round(timings[key], 5))}')
     logging.info('*** End Timing report ***')
 
 
@@ -739,7 +734,7 @@ def main():
     pygit_check_time = 0
     read_config_time = 0
     make_client_time = 0
-    preamble_total_time = 0
+    preamble1_total_time = 0
     
     preamble2_total_time = 0
     get_repos_time = 0
@@ -782,7 +777,7 @@ def main():
         git_org_client = attempt_make_client(token, organization, use_classlist, student_filename, output_dir)
         make_client_time = time.perf_counter() - make_client_start
         org_repos = git_org_client.get_repos()
-        preamble_total_time = time.perf_counter() - beginning_start
+        preamble1_total_time = time.perf_counter() - beginning_start
 
         # Variables used to get proper repos
         assignment_name = attempt_get_assignment()
@@ -793,23 +788,26 @@ def main():
         get_repos_start = time.perf_counter()
         # If student roster is specified, get repos list using proper function
         students = dict() # student dict variable do be used im main scope
+        get_repos_wo_students_start = time.perf_counter()
+        assignment_repos = get_repos(assignment_name, org_repos)
+        get_repos_wo_students_time = time.perf_counter() - get_repos_wo_students_start
         if student_filename: # if classroom roster is specified use it
             get_students_start = time.perf_counter()
             students = get_students(student_filename) # fill student dict
             get_students_time = time.perf_counter() - get_students_start
             get_repos_w_students_start = time.perf_counter()
-            repos = get_repos_specified_students(assignment_name, org_repos, students)
+            repos = get_repos_specified_students(assignment_repos, students)
             get_repos_w_students_time = time.perf_counter() - get_repos_w_students_start
-        else:
-            get_repos_wo_students_start = time.perf_counter()
-            repos = get_repos(assignment_name, org_repos)
-            get_repos_wo_students_time = time.perf_counter() - get_repos_wo_students_start
+        # else:
+        #     get_repos_wo_students_start = time.perf_counter()
+        #     repos = get_repos(assignment_name, org_repos)
+        #     get_repos_wo_students_time = time.perf_counter() - get_repos_wo_students_start
         get_repos_time = time.perf_counter() - get_repos_start
 
         simple_checks_start = time.perf_counter()
         check_time(time_due)
         check_date(date_due)
-        check_assignment_name(repos)
+        check_assignment_name(assignment_repos)
         simple_checks_time = time.perf_counter() - simple_checks_start
         # Sets path to output directory inside assignment folder where repos will be cloned.
         # Makes parent folder for whole assignment.
@@ -853,14 +851,14 @@ def main():
         num_of_lines = write_avg_insersions_file(initial_path, assignment_name)
         print_end_report(students, repos, len(not_accepted), cloned_counter.value, rollback_counter.value, num_of_lines)
         end_time = time.perf_counter() - end_start
-        total_time = time.perf_counter() - beginning_start
+        total_time = preamble1_total_time + preamble2_total_time + run_threads_time + end_time
         
         timing_dict = {
             'Check Github Version': git_check_time,
             'Check PyGithub Version': pygit_check_time,
             'Read Config File': read_config_time,
             'Make Github Client': make_client_time,
-            'Preamble 1 Time': preamble_total_time,
+            'Preamble 1 Time': preamble1_total_time,
             'Build Students Dict': get_students_time,
             'Get Repos w/ Students': get_repos_w_students_time,
             'Get Repos w/o Students': get_repos_wo_students_time,
@@ -873,7 +871,7 @@ def main():
             'End Time': end_time,
             'Total Time': total_time
                        }
-        log_timing_report(timing_dict)
+        log_timing_report(timing_dict, assignment_name)
     except Exception as e:
         logging.warning(e)
         print() 
