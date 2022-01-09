@@ -789,25 +789,21 @@ def main():
         # If student roster is specified, get repos list using proper function
         students = dict() # student dict variable do be used im main scope
         get_repos_wo_students_start = time.perf_counter()
-        assignment_repos = get_repos(assignment_name, org_repos)
+        repos = get_repos(assignment_name, org_repos)
         get_repos_wo_students_time = time.perf_counter() - get_repos_wo_students_start
         if student_filename: # if classroom roster is specified use it
             get_students_start = time.perf_counter()
             students = get_students(student_filename) # fill student dict
             get_students_time = time.perf_counter() - get_students_start
             get_repos_w_students_start = time.perf_counter()
-            repos = get_repos_specified_students(assignment_repos, students)
+            repos = get_repos_specified_students(repos, students)
             get_repos_w_students_time = time.perf_counter() - get_repos_w_students_start
-        # else:
-        #     get_repos_wo_students_start = time.perf_counter()
-        #     repos = get_repos(assignment_name, org_repos)
-        #     get_repos_wo_students_time = time.perf_counter() - get_repos_wo_students_start
         get_repos_time = time.perf_counter() - get_repos_start
 
         simple_checks_start = time.perf_counter()
         check_time(time_due)
         check_date(date_due)
-        check_assignment_name(assignment_repos)
+        check_assignment_name(repos)
         simple_checks_time = time.perf_counter() - simple_checks_start
         # Sets path to output directory inside assignment folder where repos will be cloned.
         # Makes parent folder for whole assignment.

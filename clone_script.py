@@ -72,11 +72,10 @@ def main():
         org_repos = git_org_client.get_repos()
 
         students = dict() # student dict variable do be used im main scope
+        repos = rh.get_repos(assignment_name, org_repos)
         if student_filename: # if classroom roster is specified use it
             students = rh.get_students(student_filename) # fill student dict
-            repos = rh.get_repos_specified_students(assignment_name, org_repos, students)
-        else:
-            repos = rh.get_repos(assignment_name, org_repos)
+            repos = rh.get_repos_specified_students(repos, students)
 
         rh.check_time(time_due)
         rh.check_date(date_due)
