@@ -814,13 +814,14 @@ def main():
 
         # Print and log students that have not accepted assignment
         find_not_accepted_start = time.perf_counter()
-        not_accepted = find_students_not_accepted(students, repos, assignment_name)
-        for student in not_accepted:
-            print(f'{LIGHT_RED}`{students[student]}` ({student}) did not accept the assignment.{WHITE}')
-            logging.info(f'{students[student]}` ({student}) did not accept the assignment `{assignment_name}` by the due date/time.')
-        
-        if len(not_accepted) != 0:
-            print()
+        if student_filename:
+            not_accepted = find_students_not_accepted(students, repos, assignment_name)
+            for student in not_accepted:
+                print(f'{LIGHT_RED}`{students[student]}` ({student}) did not accept the assignment.{WHITE}')
+                logging.info(f'{students[student]}` ({student}) did not accept the assignment `{assignment_name}` by the due date/time.')
+            
+            if len(not_accepted) != 0:
+                print()
         find_not_accepted_time = time.perf_counter() - find_not_accepted_start
         preamble2_total_time = time.perf_counter() - get_repos_start
         
