@@ -188,8 +188,8 @@ class RepoHandler(threading.Thread):
         self.__students = students
         self.__student_filename = student_filename
         self.__initial_path = initial_path
-        self.__new_repo_name = get_new_repo_name(self.__repo, self.__students, self.__assignment_name)
         if self.__student_filename: # If a classroom roster is used, replace github name with real name
+            self.__new_repo_name = get_new_repo_name(self.__repo, self.__students, self.__assignment_name)
             self.__repo_path = self.__initial_path / self.__new_repo_name # replace repo name when cloning to have student's real name
         else:
             self.__repo_path = self.__initial_path / self.__repo.name
@@ -360,11 +360,11 @@ def get_repos(assignment_name: str, org_repos: PaginatedList) -> Iterable:
             yield repo
 
 
-def get_repos_specified_students(assignment_repos: Iterable, students: dict) -> set:
+def get_repos_specified_students(assignment_repos: Iterable, students: dict, assignment_name: str) -> set:
     '''
     return list of all repos in an organization matching assignment name prefix and is a student specified in the specified class roster csv
     '''
-    return set(filter(lambda repo: repo.name.split('-')[-1] in students, assignment_repos))
+    return set(filter(lambda repo: repo.name.replace(f'{assignment_name}-', '') in students, assignment_repos))
 
 
 def get_students(student_filename: str) -> dict:
@@ -447,10 +447,9 @@ def read_config() -> tuple:
     if Path(CONFIG_PATH).exists(): # If config already exists
         token, organization, use_classlist, student_filename, output_dir = read_config_raw() # get variables
         if use_classlist == False:
-            print('OPTIONAL: Enter filename of csv file containing username and name of students. To ignore, just hit `enter`')
-            student_filename = input('If ignored, repo names will not be changed to match student names: ')
+            student_filename = input('Enter filename of csv file containing username and name of students: ')
             if student_filename: # if class roster was entered, set in config, check if use_classlist should be updated as well
-                use_classlist = input('Use this every time? (can be changed later in tmp/config.txt) (Y/N): ')
+                use_classlist = 'y' # Artifact from previous versions. This option is deprecated.
                 # Convert raw input boolean
                 if 'y' in use_classlist.lower():
                     use_classlist = 'True'
@@ -592,6 +591,11 @@ def check_assignment_name(repos: str):
     '''
     if not repos:
         raise InvalidAssignmentName('Assignment doesn\'t exist.')
+
+
+def check_roster(student_filename: str):
+    if not student_filename:
+        raise ClassroomFileNotFound(f'Classroom roster `{student_filename}` does not exist.')
     
 
 def attempt_get_assignment():
@@ -796,7 +800,7 @@ def main():
             students = get_students(student_filename) # fill student dict
             get_students_time = time.perf_counter() - get_students_start
             get_repos_w_students_start = time.perf_counter()
-            repos = get_repos_specified_students(repos, students)
+            repos = get_repos_specified_students(repos, students, assignment_name)
             get_repos_w_students_time = time.perf_counter() - get_repos_w_students_start
         get_repos_time = time.perf_counter() - get_repos_start
 
@@ -804,6 +808,7 @@ def main():
         check_time(time_due)
         check_date(date_due)
         check_assignment_name(repos)
+        check_roster(student_filename)
         simple_checks_time = time.perf_counter() - simple_checks_start
         # Sets path to output directory inside assignment folder where repos will be cloned.
         # Makes parent folder for whole assignment.
@@ -814,14 +819,14 @@ def main():
 
         # Print and log students that have not accepted assignment
         find_not_accepted_start = time.perf_counter()
-        if student_filename:
-            not_accepted = find_students_not_accepted(students, repos, assignment_name)
-            for student in not_accepted:
-                print(f'{LIGHT_RED}`{students[student]}` ({student}) did not accept the assignment.{WHITE}')
-                logging.info(f'{students[student]}` ({student}) did not accept the assignment `{assignment_name}` by the due date/time.')
-            
-            if len(not_accepted) != 0:
-                print()
+        not_accepted = set()
+        not_accepted = find_students_not_accepted(students, repos, assignment_name)
+        for student in not_accepted:
+            print(f'{LIGHT_RED}`{students[student]}` ({student}) did not accept the assignment.{WHITE}')
+            logging.info(f'{students[student]}` ({student}) did not accept the assignment `{assignment_name}` by the due date/time.')
+        
+        if len(not_accepted) != 0:
+            print()
         find_not_accepted_time = time.perf_counter() - find_not_accepted_start
         preamble2_total_time = time.perf_counter() - get_repos_start
         
@@ -843,7 +848,7 @@ def main():
             thread.join()
 
         run_threads_time = time.perf_counter() - run_threads_start
-        
+
         end_start = time.perf_counter()
         num_of_lines = write_avg_insersions_file(initial_path, assignment_name)
         print_end_report(students, repos, len(not_accepted), cloned_counter.value, rollback_counter.value, num_of_lines)
@@ -870,12 +875,12 @@ def main():
                        }
         log_timing_report(timing_dict, assignment_name)
     except Exception as e:
-        logging.warning(e)
+        logging.warning(f'{type(e)}: {e}')
         print() 
         try:
             print(f'{LIGHT_RED}{e.message}{WHITE}')
         except Exception:
-            print(e)
+            print(f'{LIGHT_RED}{type(e)}: {e}{WHITE}')
 
 
 if __name__ == '__main__':
