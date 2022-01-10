@@ -53,7 +53,7 @@ In order to ensure you spell it right, it’s recommended you click on the organ
 
 ## Get Class Roster
 
-Finally we will be getting a classroom roster csv file from Github Classroom in order to make grading easier. This will allow the script to change github usernames to peoples actually usernames. This is option ofcouse but is highly recommended so that you don't have to clone every repo from the organization every time.
+Finally we will be getting a classroom roster csv file from Github Classroom in order to make grading easier. This will allow the script to change github usernames to peoples actually names. The script will also only clone the entries in the csv file. This is option of couse but is highly recommended so that you don't have to clone every repo from the organization every time.
 
 Steps | Guiding Images
 :-----: | :-----------:
