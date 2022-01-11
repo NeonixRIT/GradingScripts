@@ -177,22 +177,18 @@ class RepoHandler(threading.Thread):
 
     Each thread only clones one repo.
     '''
-    __slots___ = ['__repo', '__assignment_name', '__date_due', '__time_due', '__students', '__student_filename', '__initial_path', '__repo_path', '__token', '__new_repo_name']
+    __slots___ = ['__repo', '__assignment_name', '__date_due', '__time_due', '__students', '__initial_path', '__repo_path', '__token', '__new_repo_name']
 
 
-    def __init__(self, repo: Repository, assignment_name: str, date_due: str, time_due: str, students: dict, student_filename: str, initial_path: Path, token: str):
+    def __init__(self, repo: Repository, assignment_name: str, date_due: str, time_due: str, students: dict, initial_path: Path, token: str):
         self.__repo = repo # PyGithub repo object
         self.__assignment_name = assignment_name # Repo name prefix
         self.__date_due = date_due 
         self.__time_due = time_due
         self.__students = students
-        self.__student_filename = student_filename
         self.__initial_path = initial_path
-        if self.__student_filename: # If a classroom roster is used, replace github name with real name
-            self.__new_repo_name = get_new_repo_name(self.__repo, self.__students, self.__assignment_name)
-            self.__repo_path = self.__initial_path / self.__new_repo_name # replace repo name when cloning to have student's real name
-        else:
-            self.__repo_path = self.__initial_path / self.__repo.name
+        self.__new_repo_name = get_new_repo_name(self.__repo, self.__students, self.__assignment_name)
+        self.__repo_path = self.__initial_path / self.__new_repo_name # replace repo name when cloning to have student's real name
         self.__token = token
         super().__init__()
 
@@ -303,10 +299,7 @@ class RepoHandler(threading.Thread):
 
             # Calc avg and place in global dictionary using maped repo name if student roster is provided or normal repo name
             average_insertions = round(total_insertions / total_commits, 2)
-            if self.__student_filename: # If using a classroom roster, replace repo name in avgLinesInserted.txt w/ student name
-                AVG_INSERTIONS_DICT[self.__new_repo_name] = average_insertions
-            else: # else use default repo name
-                AVG_INSERTIONS_DICT[self.__repo.name] = average_insertions
+            AVG_INSERTIONS_DICT[self.__new_repo_name] = average_insertions
         except Exception:
             logging.warning(f'Failed to find average insertions for {self.__repo.name}')
             raise CommitLogException(f'Failed to find average insertions for {self.__repo.name}')
@@ -385,7 +378,7 @@ def get_students(student_filename: str) -> dict:
                 if name and github: # if csv contains student name and github username, map them to each other
                     students[github] = name
     else:
-        raise ClassroomFileNotFound(f'Classroom roster file `{student_filename}` not found.')
+        raise ClassroomFileNotFound(f'Classroom roster `{student_filename}` does not exist.')
     return students # return dict mapping names to github username
 
 
@@ -397,7 +390,7 @@ def get_new_repo_name(repo: Repository, students: dict, assignment_name: str) ->
     return f'{assignment_name}-{students[student_github]}'
 
 
-def save_config(token: str, organization: str, use_classlist: bool, student_filename: str, output_dir: Path):
+def save_config(token: str, organization: str, student_filename: str, output_dir: Path):
     '''
     Save parameters into config file to be read on future runs
     '''
@@ -406,7 +399,7 @@ def save_config(token: str, organization: str, use_classlist: bool, student_file
         config.write('\n')
         config.write(f'Organization: {organization}')
         config.write('\n')
-        config.write(f'Save Classroom Roster: {str(use_classlist)}')
+        config.write(f'Save Classroom Roster: {str(True)}')
         config.write('\n')
         config.write(f'Classroom Roster Path: {student_filename}')
         config.write('\n')
@@ -420,76 +413,47 @@ def read_config_raw() -> tuple:
     '''
     token = ''
     organization = ''
-    use_classlist = ''
     student_filename = ''
     output_dir = ''
     if Path(CONFIG_PATH).exists():
         with open(CONFIG_PATH, 'r') as config:
             token = config.readline().strip().split(': ')[1]
             organization = config.readline().strip().split(': ')[1]
-            use_classlist = config.readline().strip().split(': ')[1]
-            if use_classlist == 'True':
-                use_classlist = True
-                student_filename = config.readline().strip().split(': ')[1]
-            elif use_classlist == 'False':
-                use_classlist = False
-                config.readline()
+            _ = config.readline().strip().split(': ')[1]
+            student_filename = config.readline().strip().split(': ')[1]
             output_dir = Path(config.readline().strip().split(': ')[1])
     else:
         raise ConfigFileNotFound(f'`{CONFIG_PATH}` does not exist')
-    return (token, organization, use_classlist, student_filename, output_dir)
+    return (token, organization, student_filename, output_dir)
 
 
 def read_config() -> tuple:
     '''
-    Checks whether config already exists, if so and use_classlist is False, ask for class roster path
+    Checks whether config already exists, if not make default config
     '''
     if Path(CONFIG_PATH).exists(): # If config already exists
-        token, organization, use_classlist, student_filename, output_dir = read_config_raw() # get variables
-        if use_classlist == False:
-            student_filename = input('Enter filename of csv file containing username and name of students: ')
-            if student_filename: # if class roster was entered, set in config, check if use_classlist should be updated as well
-                use_classlist = 'y' # Artifact from previous versions. This option is deprecated.
-                # Convert raw input boolean
-                if 'y' in use_classlist.lower():
-                    use_classlist = 'True'
-                elif 'n' in use_classlist.lower():
-                    use_classlist = 'False'
-            else:
-                use_classlist = 'False'
-            save_config(token, organization, use_classlist, student_filename, output_dir)
+        token, organization, student_filename, output_dir = read_config_raw() # get variables
     else:
         make_default_config()
-        token, organization, use_classlist, student_filename, output_dir = read_config_raw() # Update return variables
-    return (token, organization, use_classlist, student_filename, output_dir)
+        token, organization, student_filename, output_dir = read_config_raw() # Update return variables
+    return (token, organization, student_filename, output_dir)
 
 
 def make_default_config():
     '''
     Creates a default config file getting access token, org, class roster, etc, from user input
     '''
-    use_classlist = ''
     student_filename = ''
     token = input('Github Authentication Token: ')
     organization = input('Organization Name: ')
-    print('OPTIONAL: Enter filename of csv file containing username and name of students. To ignore, just hit `enter`')
-    student_filename = input('If ignored, repo names will not be changed to match student names: ')
-    if student_filename:
-        use_classlist = input('Use this every time? (can be changed later in tmp/config.txt) (Y/N): ')
-        # Convert raw input to boolean
-        if 'y' in use_classlist.lower():
-            use_classlist = 'True'
-        elif 'n' in use_classlist.lower():
-            use_classlist = 'False'
-    else:
-        use_classlist = 'False'
+    student_filename = input('Enter filename of csv file containing username and name of students: ')
     output_dir = Path(input('Output directory for assignment files (`enter` for current directory): '))
     if not output_dir:
         output_dir = Path.cwd()
     while not Path.is_dir(output_dir):
         print(f'Directory `{output_dir}` not found.')
         output_dir = Path(input('Output directory for assignment files (`enter` for current directory): '))
-    save_config(token, organization, use_classlist, student_filename, output_dir)
+    save_config(token, organization, student_filename, output_dir)
 
 
 def check_git_version():
@@ -591,11 +555,6 @@ def check_assignment_name(repos: str):
     '''
     if not repos:
         raise InvalidAssignmentName('Assignment doesn\'t exist.')
-
-
-def check_roster(student_filename: str):
-    if not student_filename:
-        raise ClassroomFileNotFound(f'Classroom roster `{student_filename}` does not exist.')
     
 
 def attempt_get_assignment():
@@ -641,25 +600,25 @@ def find_students_not_accepted(students: dict, repos: list, assignment_name: str
     return students_keys ^ accepted
 
 
-def update_organization(token: str, use_classlist: bool, student_filename: str, output_dir: Path) -> tuple:
+def update_organization(token: str, student_filename: str, output_dir: Path) -> tuple:
     '''
     Update organization name in config.txt file. Returns updated config.
     '''
     new_organization = input('New Github Organization name: ')
-    save_config(token, new_organization, use_classlist, student_filename, output_dir)
-    return (token, new_organization, use_classlist, student_filename, output_dir)
+    save_config(token, new_organization, student_filename, output_dir)
+    return (token, new_organization, student_filename, output_dir)
     
     
-def update_token(organization: str, use_classlist: bool, student_filename: str, output_dir: Path) -> tuple:
+def update_token(organization: str, student_filename: str, output_dir: Path) -> tuple:
     '''
     Update token string in config.txt file. Return updated config.
     '''
     new_token = input('New Github O-Auth token: ')
-    save_config(new_token, organization, use_classlist, student_filename, output_dir)
-    return (new_token, organization, use_classlist, student_filename, output_dir)
+    save_config(new_token, organization, student_filename, output_dir)
+    return (new_token, organization, student_filename, output_dir)
 
 
-def prompt_invalid_tok_org(exception: Exception, token: str, organization: str, use_classlist: bool, student_filename: str, output_dir: Path) -> tuple:
+def prompt_invalid_tok_org(exception: Exception, token: str, organization: str, student_filename: str, output_dir: Path) -> tuple:
     '''
     Prompt user and attempt to fix invalid tokens/organizations in config.txt
     '''
@@ -671,14 +630,14 @@ def prompt_invalid_tok_org(exception: Exception, token: str, organization: str, 
     response = input(f'Would you like to update your {prompt_str} in config.txt? (Y/N): ')
     if response.lower() == 'y' or response.lower() == 'yes':
         if ex_type == BadCredentialsException:
-            return update_token(organization, use_classlist, student_filename, output_dir)
+            return update_token(organization, student_filename, output_dir)
         elif ex_type == UnknownObjectException:
-            return update_organization(token, use_classlist, student_filename, output_dir)
+            return update_organization(token, student_filename, output_dir)
     else:
         exit()
             
             
-def attempt_make_client(token: str, organization: str, use_classlist: bool, student_filename: str, output_dir: Path):
+def attempt_make_client(token: str, organization: str, student_filename: str, output_dir: Path):
     '''
     Attempts to make and return github client for the organization to get repo information with.
     Attempts to fix invalid organization/token issues and gives repeated attempts for other issues.
@@ -688,7 +647,7 @@ def attempt_make_client(token: str, organization: str, use_classlist: bool, stud
         try:
             return Github(token.strip(), pool_size = MAX_THREADS).get_organization(organization.strip())
         except (BadCredentialsException, UnknownObjectException) as e:
-            token, organization, use_classlist, student_filename, output_dir = prompt_invalid_tok_org(e, token, organization, use_classlist, student_filename, output_dir)
+            token, organization, student_filename, output_dir = prompt_invalid_tok_org(e, token, organization, student_filename, output_dir)
         except Exception as e:
             logging.warning(e)
         attempts += 1
@@ -744,7 +703,6 @@ def main():
     get_repos_time = 0
     get_students_time = 0
     get_repos_w_students_time = 0
-    get_repos_wo_students_time = 0
     simple_checks_time = 0
     make_init_time = 0
     find_not_accepted_time = 0
@@ -773,12 +731,12 @@ def main():
         pygit_check_time = time.perf_counter() - pygit_check_start
         # Read config file, if doesn't exist make one using user input.
         read_config_start = time.perf_counter()
-        token, organization, use_classlist, student_filename, output_dir = read_config()
+        token, organization, student_filename, output_dir = read_config()
         read_config_time = time.perf_counter() - read_config_start
 
         # Create Organization to access repos, raise errors if invalid token/org
         make_client_start = time.perf_counter()
-        git_org_client = attempt_make_client(token, organization, use_classlist, student_filename, output_dir)
+        git_org_client = attempt_make_client(token, organization, student_filename, output_dir)
         make_client_time = time.perf_counter() - make_client_start
         org_repos = git_org_client.get_repos()
         preamble1_total_time = time.perf_counter() - beginning_start
@@ -790,25 +748,20 @@ def main():
         print() # new line for formatting reasons
 
         get_repos_start = time.perf_counter()
-        # If student roster is specified, get repos list using proper function
         students = dict() # student dict variable do be used im main scope
-        get_repos_wo_students_start = time.perf_counter()
         repos = get_repos(assignment_name, org_repos)
-        get_repos_wo_students_time = time.perf_counter() - get_repos_wo_students_start
-        if student_filename: # if classroom roster is specified use it
-            get_students_start = time.perf_counter()
-            students = get_students(student_filename) # fill student dict
-            get_students_time = time.perf_counter() - get_students_start
-            get_repos_w_students_start = time.perf_counter()
-            repos = get_repos_specified_students(repos, students, assignment_name)
-            get_repos_w_students_time = time.perf_counter() - get_repos_w_students_start
         get_repos_time = time.perf_counter() - get_repos_start
+        get_students_start = time.perf_counter()
+        students = get_students(student_filename) # fill student dict
+        get_students_time = time.perf_counter() - get_students_start
+        get_repos_w_students_start = time.perf_counter()
+        repos = get_repos_specified_students(repos, students, assignment_name)
+        get_repos_w_students_time = time.perf_counter() - get_repos_w_students_start
 
         simple_checks_start = time.perf_counter()
         check_time(time_due)
         check_date(date_due)
         check_assignment_name(repos)
-        check_roster(student_filename)
         simple_checks_time = time.perf_counter() - simple_checks_start
         # Sets path to output directory inside assignment folder where repos will be cloned.
         # Makes parent folder for whole assignment.
@@ -836,7 +789,7 @@ def main():
         for repo in repos:
             # Create thread to handle repos and add to thread list
             # Each thread clones a repo, sets it back to due date/time, and gets avg lines per commit
-            thread = RepoHandler(repo, assignment_name, date_due, time_due, students, bool(student_filename), initial_path, token)
+            thread = RepoHandler(repo, assignment_name, date_due, time_due, students, initial_path, token)
             threads += [thread]
 
         # Run all clone threads
@@ -862,9 +815,8 @@ def main():
             'Make Github Client': make_client_time,
             'Preamble 1 Time': preamble1_total_time,
             'Build Students Dict': get_students_time,
-            'Get Repos w/ Students': get_repos_w_students_time,
-            'Get Repos w/o Students': get_repos_wo_students_time,
-            'Get Repos Total': get_repos_time,
+            'Get Repos': get_repos_time,
+            'Get Repo Student\'s Repos': get_repos_w_students_time,
             'Simple Checks': simple_checks_time,
             'Make Initial Directory': make_init_time,
             'Find Not Accepted Students': find_not_accepted_time,
