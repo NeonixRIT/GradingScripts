@@ -65,17 +65,17 @@ def main():
         # Check local PyGithub module version is compatible with script
         rh.check_pygithub_version()
         # Read config file, if doesn't exist make one using user input.
-        token, organization, use_classlist, student_filename, output_dir = rh.read_config()
+        token, organization, student_filename, output_dir = rh.read_config()
 
         # Create Organization to access repos
-        git_org_client = rh.attempt_make_client(token, organization, use_classlist, student_filename, output_dir)
+        git_org_client = rh.attempt_make_client(token, organization, student_filename, output_dir)
         org_repos = git_org_client.get_repos()
 
         students = dict() # student dict variable do be used im main scope
         repos = rh.get_repos(assignment_name, org_repos)
         if student_filename: # if classroom roster is specified use it
             students = rh.get_students(student_filename) # fill student dict
-            repos = rh.get_repos_specified_students(repos, students)
+            repos = rh.get_repos_specified_students(repos, students, assignment_name)
 
         rh.check_time(time_due)
         rh.check_date(date_due)
