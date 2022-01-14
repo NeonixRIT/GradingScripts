@@ -3,7 +3,8 @@ import github as git
 
 from pathlib import Path
 
-REG_CONFIG_PATH = './tmp/config.txt'
+REG_CONFIG_PATH = '../tmp/config.txt'
+ROSTER_FILENAME = 'test_roster.csv'
 DATE = '2022-01-14'
 TIME = '08:30'
 ASSIGNMENT_NAME = 'test'
@@ -51,12 +52,29 @@ def test_get_repos():
     assert actual == expected
         
 
-def get_students():
-    pass
+def test_get_students():
+    expected = sorted({
+        "AcheronsS": "Student-Multiple-Names-Test-M-I",
+        "late-accept": "accept-late",
+        "base": "student-base",
+        "master-branch": "branch-master",
+        "main-branch": "branch-main",
+        "NoDash": "no,dash",
+        "weird-commit": "weird-commit",
+        "bad-filename": "bad-filename"
+    })
+    actual = sorted(rh.get_students(ROSTER_FILENAME))
+    assert actual == expected
 
 
 def test_get_repos_specified_students():
-    pass
+    github_client = git.Github(TOKEN.strip(), pool_size = rh.MAX_THREADS).get_organization(ORGANIZATION_NAME)
+    org_repos = github_client.get_repos()
+    repo_gen = rh.get_repos(ASSIGNMENT_NAME, org_repos)
+    students = rh.get_students(ROSTER_FILENAME)
+    expected = sorted({'test-late-accept', 'test-main-branch', 'test-base', 'test-master-branch', 'test-weird-commit', 'test-NoDash', 'test-bad-filename'})
+    actual = sorted([repo.name for repo in rh.get_repos_specified_students(repo_gen, students, ASSIGNMENT_NAME)])
+    assert actual == expected
 
 
 def test_get_new_repo_name():
@@ -151,35 +169,35 @@ def test_log_timing_report():
 
 ''' RepoHandler Tests'''
 def test_repo_base():
-    github_client = git.Github(token=TOKEN, organization=ORGANIZATION_NAME)
-    repo_handler = rh.RepoHandler()
+    github_client = git.Github(TOKEN.strip(), pool_size = rh.MAX_THREADS).get_organization(ORGANIZATION_NAME)
+    repo_handler = RepoHandler()
 
 
 def test_master_branch():
-    github_client = git.Github(token=TOKEN, organization=ORGANIZATION_NAME)
-    repo_handler = rh.RepoHandler()
+    github_client = git.Github(TOKEN.strip(), pool_size = rh.MAX_THREADS).get_organization(ORGANIZATION_NAME)
+    repo_handler = RepoHandler()
 
 
 def test_main_branch():
-    github_client = git.Github(token=TOKEN, organization=ORGANIZATION_NAME)
-    repo_handler = rh.RepoHandler()
+    github_client = git.Github(TOKEN.strip(), pool_size = rh.MAX_THREADS).get_organization(ORGANIZATION_NAME)
+    repo_handler = RepoHandler()
 
 
 def test_repo_no_dash():
-    github_client = git.Github(token=TOKEN, organization=ORGANIZATION_NAME)
-    repo_handler = rh.RepoHandler()
+    github_client = git.Github(TOKEN.strip(), pool_size = rh.MAX_THREADS).get_organization(ORGANIZATION_NAME)
+    repo_handler = RepoHandler()
 
 
 def test_repo_bad_filename():
-    github_client = git.Github(token=TOKEN, organization=ORGANIZATION_NAME)
-    repo_handler = rh.RepoHandler()
+    github_client = git.Github(TOKEN.strip(), pool_size = rh.MAX_THREADS).get_organization(ORGANIZATION_NAME)
+    repo_handler = RepoHandler()
 
 
 def test_weird_commit_msg():
-    github_client = git.Github(token=TOKEN, organization=ORGANIZATION_NAME)
-    repo_handler = rh.RepoHandler()
+    github_client = git.Github(TOKEN.strip(), pool_size = rh.MAX_THREADS).get_organization(ORGANIZATION_NAME)
+    repo_handler = RepoHandler()
 
 
 def test_repo_late():
-    github_client = git.Github(token=TOKEN, organization=ORGANIZATION_NAME)
-    repo_handler = rh.RepoHandler()
+    github_client = git.Github(TOKEN.strip(), pool_size = rh.MAX_THREADS).get_organization(ORGANIZATION_NAME)
+    repo_handler = RepoHandler()
