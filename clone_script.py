@@ -101,7 +101,7 @@ def main():
         for repo in repos:
             # Create thread to handle repos and add to thread list
             # Each thread clones a repo, sets it back to due date/time, and gets avg lines per commit
-            thread = rh.RepoHandler(repo, assignment_name, date_due, time_due, students, bool(student_filename), initial_path, token)
+            thread = rh.RepoHandler(repo, assignment_name, date_due, time_due, students, initial_path, token)
             threads += [thread]
 
         # Run all clone threads
