@@ -19,6 +19,7 @@ Script to clone all or some repositories in a Github Organization based on repo 
 AVERAGE_LINES_FILENAME = 'avgLinesInserted.txt'
 CONFIG_PATH = 'tmp/config.txt' # Stores token, org name, save class roster bool, class roster path, output dir
 BASE_GITHUB_LINK = 'https://github.com'
+SCRIPT_VERSION = '0.8.0'
 MIN_GIT_VERSION = 2.30 # Required 2.30 minimum because of authentication changes
 MIN_PYGITHUB_VERSION = 1.55 # Requires 1.55 to allow threading
 MAX_THREADS = 200 # Max number of concurrent cloning processes
@@ -478,6 +479,33 @@ def make_default_config():
     save_config(token, organization, student_filename, output_dir)
 
 
+def check_update_available(token: str) -> bool:
+    try:
+        client = Github(token.strip())
+        repo = client.get_repo('Acher0ns/GradingScripts')
+        releases = repo.get_releases()
+        latest = releases[0]
+        latest_version = latest.tag_name
+
+        version_split = SCRIPT_VERSION.split('.')
+        latest_version_split = latest_version.split('.')
+
+        for i in range(len(version_split)):
+            version_number = int(version_split[i])
+            latest_version_number = int(latest_version_split[i])
+            if version_number < latest_version_number:
+                update_print_and_prompt(latest)
+                return True
+            elif version_number > latest_version_number: return False
+        return False
+    except Exception:
+        return False
+
+
+def update_print_and_prompt(latest_release):
+    print(f'{LIGHT_GREEN}An upadate is available. {SCRIPT_VERSION} -> {latest_release.tag_name}\nDescription:\n{latest_release.body}\n{WHITE}')
+
+
 def check_git_version():
     '''
     Check that git version is at or above min requirements for script
@@ -718,6 +746,7 @@ def main():
     git_check_time = 0
     pygit_check_time = 0
     read_config_time = 0
+    update_check_time = 0
     make_client_time = 0
     preamble1_total_time = 0
     
@@ -755,11 +784,15 @@ def main():
         read_config_start = time.perf_counter()
         token, organization, student_filename, output_dir = read_config()
         read_config_time = time.perf_counter() - read_config_start
+        script_update_start = time.perf_counter()
+        check_update_available(token)
+        update_check_time = time.perf_counter() - script_update_start
 
         # Create Organization to access repos, raise errors if invalid token/org
         make_client_start = time.perf_counter()
         git_org_client = attempt_make_client(token, organization, student_filename, output_dir)
         make_client_time = time.perf_counter() - make_client_start
+
         org_repos = git_org_client.get_repos()
         preamble1_total_time = time.perf_counter() - beginning_start
 
@@ -830,24 +863,25 @@ def main():
         end_time = time.perf_counter() - end_start
         total_time = preamble1_total_time + preamble2_total_time + run_threads_time + end_time
         
-        timing_dict = {
-            'Check Github Version': git_check_time,
-            'Check PyGithub Version': pygit_check_time,
-            'Read Config File': read_config_time,
-            'Make Github Client': make_client_time,
-            'Preamble 1 Time': preamble1_total_time,
-            'Build Students Dict': get_students_time,
-            'Get Repos': get_repos_time,
-            'Get Repo Student\'s Repos': get_repos_w_students_time,
-            'Simple Checks': simple_checks_time,
-            'Make Initial Directory': make_init_time,
-            'Find Not Accepted Students': find_not_accepted_time,
-            'Preamble 2 Time': preamble2_total_time,
-            'Handle All Repos Time': run_threads_time,
-            'End Time': end_time,
-            'Total Time': total_time
-                       }
-        log_timing_report(timing_dict, assignment_name)
+        # timing_dict = {
+        #     'Check Github Version': git_check_time,
+        #     'Check PyGithub Version': pygit_check_time,
+        #     'Read Config File': read_config_time,
+        #     'Update Check': update_check_time,
+        #     'Make Github Client': make_client_time,
+        #     'Preamble 1 Time': preamble1_total_time,
+        #     'Build Students Dict': get_students_time,
+        #     'Get Repos': get_repos_time,
+        #     'Get Repo Student\'s Repos': get_repos_w_students_time,
+        #     'Simple Checks': simple_checks_time,
+        #     'Make Initial Directory': make_init_time,
+        #     'Find Not Accepted Students': find_not_accepted_time,
+        #     'Preamble 2 Time': preamble2_total_time,
+        #     'Handle All Repos Time': run_threads_time,
+        #     'End Time': end_time,
+        #     'Total Time': total_time
+        #                }
+        # log_timing_report(timing_dict, assignment_name)
     except Exception as e:
         logging.warning(f'{type(e)}: {e}')
         print() 

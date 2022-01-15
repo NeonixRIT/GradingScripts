@@ -342,6 +342,20 @@ def test_print_end_report(capsys):
     assert actual == expected
 
 
+def check_update_available_true():
+    rh.SCRIPT_VERSION = '0.0.0'
+    expected = True
+    actual = rh.check_update_available(TOKEN)
+    assert actual == expected
+
+
+def check_update_available_false():
+    rh.SCRIPT_VERSION = f'9999.9999.9999'
+    expected = False
+    actual = rh.check_update_available(TOKEN)
+    assert actual == expected
+
+
 ''' RepoHandler() Tests'''
 def test_repo_base():
     try:
