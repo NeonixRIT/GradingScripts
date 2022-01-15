@@ -216,6 +216,28 @@ class RepoHandler(threading.Thread):
             print(f'{LIGHT_RED}Skipping repo `{self.__repo.name}` because: {ge.message}{WHITE}')
             logging.warning(f'{self.__repo.name}: {ge}')
 
+    
+    def run_raise(self):
+        try:            
+            # If no commits, skip repo
+            try:
+                len(list(self.__repo.get_commits()))
+            except Exception:
+                print(f'{LIGHT_RED}Skipping `{self.__repo.name}` because it has 0 commits.{WHITE}')
+                logging.warning(f'Skipping repo `{self.__repo.name}` because it has 0 commits.')
+                return
+
+            self.clone_repo() # clones repo
+            cloned_counter.increment()
+            commit_hash = self.get_commit_hash() # get commit hash at due date
+            self.rollback_repo(commit_hash) # rollback repo to commit hash
+            rollback_counter.increment()
+            self.get_repo_stats() # get average lines per commit
+        except GithubException as ge:
+            print(f'{LIGHT_RED}Skipping repo `{self.__repo.name}` because: {ge.message}{WHITE}')
+            logging.warning(f'{self.__repo.name}: {ge}')
+            raise ge
+
 
     def clone_repo(self):
         '''
@@ -286,7 +308,7 @@ class RepoHandler(threading.Thread):
                 for line in iter(log_process.stdout.readline, b''): # b'\n'-separated lines
                     line = line.decode()
                     self.log_errors_given_line(line)
-                    if (re.match(r"\s\d+\sfile.*changed,\s\d+\sinsertion.*[(+)].*", line)): # if line has insertion number in it
+                    if (re.match(r"^\s\d+\sfile.*changed,\s\d+\sinsertion.*[(+)].*", line)): # if line has insertion number in it
                         # Replaces all non digits in a string with nothing and appends the commit's stats to repo_stats list
                         # [0] = files changed
                         # [1] = insertions

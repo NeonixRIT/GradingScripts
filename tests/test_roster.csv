@@ -7,3 +7,4 @@
 "no,dash","NoDash"
 "weird,commit","weird-commit"
 "bad,filename","bad-filename"
+"bad,filename,rollback","bad-filename-rollback"

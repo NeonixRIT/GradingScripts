@@ -14,12 +14,10 @@ def print_help():
 
 
 def parse_args(args: list):
-    if len(args) < 4:
-        if len(args) > 1 and (args[1] == '-help' or args[1] == '-h' or args[1] == '-?' or args[1] == '?'):
-            print_help()
-            input('Press return key to exit...')
-            exit()
+    if (len(args) < 4) or (args[1] == '-help' or args[1] == '-h' or args[1] == '-?' or args[1] == '?') or (len(args) > 5):
+        print_help()
         raise rh.InvalidArguments()
+        
     assignment_name = args[1]
     date_due = args[2]
     time_due = args[3]
@@ -28,9 +26,6 @@ def parse_args(args: list):
 
     if len(args) == 5:
         out_folder = args[4]
-
-    if len(args) > 5:
-        raise rh.InvalidArguments()
         
     return assignment_name, date_due, time_due, out_folder
 
@@ -47,7 +42,7 @@ def build_init_path_given_out(output_dir: path.Path, out_folder: str):
     return path.Path(init_path)
 
 
-def main():
+def main(args, token = None, org = None, student_filename = None):
     '''
     Main function
     '''
@@ -59,16 +54,19 @@ def main():
 
     # Try catch catches errors and sends them to the log file instead of outputting to console
     try:
-        assignment_name, date_due, time_due, out_folder = parse_args(sys.argv)
+        assignment_name, date_due, time_due, out_folder = parse_args(args)
         # Check local git version is compatible with script
         rh.check_git_version()
         # Check local PyGithub module version is compatible with script
         rh.check_pygithub_version()
         # Read config file, if doesn't exist make one using user input.
-        token, organization, student_filename, output_dir = rh.read_config()
+        if token != None and org != None and student_filename != None:
+            _, _, _, output_dir = rh.read_config()
+        else:
+            token, org, student_filename, output_dir = rh.read_config()
 
         # Create Organization to access repos
-        git_org_client = rh.attempt_make_client(token, organization, student_filename, output_dir)
+        git_org_client = rh.attempt_make_client(token, org, student_filename, output_dir)
         org_repos = git_org_client.get_repos()
 
         students = dict() # student dict variable do be used im main scope
@@ -124,4 +122,4 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    main(sys.argv)
