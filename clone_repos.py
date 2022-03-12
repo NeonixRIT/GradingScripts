@@ -4,7 +4,6 @@ import os
 import re
 import subprocess
 import threading
-import time
 
 from datetime import date, datetime
 from typing import Iterable
@@ -35,7 +34,7 @@ Possible exceptions caused by github/git
 '''
 class GithubException(Exception):
     __slots__ = ['message']
-    
+
     def __init__(self, message) -> None:
         self.message = message
 
@@ -63,14 +62,14 @@ class RollbackException(GithubException):
 class ClientException(GithubException):
     def __init__(self, message) -> None:
         super().__init__(message)
-     
-        
+
+
 '''
 Possible exceptions due to version incompatibility
 '''
 class CompatibilityException(Exception):
     __slots__ = ['message']
-    
+
     def __init__(self, message) -> None:
         self.message = message
 
@@ -78,7 +77,7 @@ class CompatibilityException(Exception):
 class InvalidGitVersion(CompatibilityException):
     def __init__(self, message) -> None:
         super().__init__(message)
-        
+
 
 class GitNotFound(CompatibilityException):
     def __init__(self, message) -> None:
@@ -88,13 +87,13 @@ class GitNotFound(CompatibilityException):
 class InvalidPyGithubVersion(CompatibilityException):
     def __init__(self, message) -> None:
         super().__init__(message)
-        
+
 
 class PyGithubNotFound(CompatibilityException):
     def __init__(self, message) -> None:
         super().__init__(message)
-        
-        
+
+
 class PipNotFound(CompatibilityException):
     def __init__(self, message) -> None:
         super().__init__(message)
@@ -105,7 +104,7 @@ Possible exceptions due to user error
 '''
 class UserError(Exception):
     __slots__ = ['message']
-    
+
     def __init__(self, message) -> None:
         self.message = message
 
@@ -118,7 +117,7 @@ class InvalidAssignmentName(UserError):
 class InvalidDate(UserError):
     def __init__(self, message) -> None:
         super().__init__(message)
-        
+
 
 class InvalidToken(UserError):
     def __init__(self, message) -> None:
@@ -128,17 +127,17 @@ class InvalidToken(UserError):
 class InvalidTime(UserError):
     def __init__(self, message) -> None:
         super().__init__(message)
-     
-        
+
+
 class InvalidArguments(UserError):
-    def __init__(self, message = 'invalid number of arguments') -> None:
+    def __init__(self, message='invalid number of arguments') -> None:
         super().__init__(message)
 
 
 class ClassroomFileNotFound(UserError):
     def __init__(self, message) -> None:
         super().__init__(message)
-        
+
 
 class ConfigFileNotFound(UserError):
     def __init__(self, message) -> None:
@@ -155,8 +154,8 @@ class AtomicCounter:
     Simple Thread safe integer
     '''
     __slots__ = ['value', '_lock']
-    
-    
+
+
     def __init__(self, initial=0):
         """Initialize a new atomic counter to given initial value (default 0)."""
         self.value = initial
@@ -184,7 +183,7 @@ class RepoHandler(threading.Thread):
     def __init__(self, repo: Repository, assignment_name: str, date_due: str, time_due: str, students: dict, initial_path: Path, token: str):
         self.__repo = repo # PyGithub repo object
         self.__assignment_name = assignment_name # Repo name prefix
-        self.__date_due = date_due 
+        self.__date_due = date_due
         self.__time_due = time_due
         self.__students = students
         self.__initial_path = initial_path
@@ -198,7 +197,7 @@ class RepoHandler(threading.Thread):
         '''
         Clones given repo and renames destination to student real name if class roster is provided.
         '''
-        try:            
+        try:
             # If no commits, skip repo
             try:
                 len(list(self.__repo.get_commits()))
@@ -217,9 +216,9 @@ class RepoHandler(threading.Thread):
             print(f'{LIGHT_RED}Skipping repo `{self.__repo.name}` because: {ge.message}{WHITE}')
             logging.warning(f'{self.__repo.name}: {ge}')
 
-    
+
     def run_raise(self):
-        try:            
+        try:
             # If no commits, skip repo
             try:
                 len(list(self.__repo.get_commits()))
@@ -249,14 +248,14 @@ class RepoHandler(threading.Thread):
         '''
         print(f'Cloning {self.__repo.name} into {self.__repo_path}...') # tell end user what repo is being cloned and where it is going to
         # run process on system that executes 'git clone' command. stdout is redirected so it doesn't output to end user
-        
+
         clone_url = self.__repo.clone_url.replace('https://', f'https://{self.__token}@')
         clone_process = subprocess.Popen(['git', 'clone', clone_url, f'{str(self.__repo_path)}'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT) # git clone to output file, Hides output from console
         try:
             self.log_errors_given_subprocess(clone_process) # reads output line by line and checks for errors that occured during cloning
         except GithubException:
-            logging.warning(f'Clone failed (likely due to invalid filename).') # log error to log file
-            raise CloneException(f'Clone failed (likely due to invalid filename).')
+            logging.warning('Clone failed (likely due to invalid filename).') # log error to log file
+            raise CloneException('Clone failed (likely due to invalid filename).')
 
 
     def get_commit_hash(self) -> str:
@@ -271,10 +270,10 @@ class RepoHandler(threading.Thread):
                 try:
                     self.log_errors_given_line(line) # if command returned error raise exception
                 except GithubException:
-                    logging.warning(f'Error occured while retrieving commit hash at time/date (likely due to student accepting assignment after given date/time).')
-                    raise RevlistException(f'Error occured while retrieving commit hash at time/date (likely due to student accepting assignment after given date/time).')
+                    logging.warning('Error occured while retrieving commit hash at time/date (likely due to student accepting assignment after given date/time).')
+                    raise RevlistException('Error occured while retrieving commit hash at time/date (likely due to student accepting assignment after given date/time).')
                 return line.strip() # else returns commit hash of repo at timestamp
-        
+
 
     def rollback_repo(self, commit_hash):
         '''
@@ -290,7 +289,7 @@ class RepoHandler(threading.Thread):
         except GithubException:
             logging.warning(f'Rollback failed for `{self.__repo.name}` (likely due to invalid filename at specified commit).')
             raise RollbackException(f'Rollback failed for `{self.__repo.name}` (likely due to invalid filename at specified commit).')
-        
+
 
     def get_repo_stats(self):
         '''
@@ -327,7 +326,7 @@ class RepoHandler(threading.Thread):
             logging.warning(f'Failed to find average insertions for {self.__repo.name}')
             raise CommitLogException(f'Failed to find average insertions for {self.__repo.name}')
 
-    
+
     def log_errors_given_line(self, line: str):
         '''
         Given 1 line of git command output, check if error.
@@ -335,9 +334,9 @@ class RepoHandler(threading.Thread):
         '''
         if re.match(r'^error:|^warning:|^fatal:', line): # if git command threw error (usually wrong branch name)
             logging.warning('Subprocess: %r', line) # Log error to log file
-            raise GithubException(f'An error has occured with git.') # Raise exception to the thread
-        
-        
+            raise GithubException('An error has occured with git.') # Raise exception to the thread
+
+
     def log_errors_given_subprocess(self, subprocess: subprocess.Popen):
         '''
         Reads full git command output of a subprocess and raises exception & logs if error is found
@@ -352,11 +351,11 @@ def is_windows() -> bool:
     return os.name == 'nt'
 
 
-def build_init_path(outdir: Path, assignment_name: str, date, time) -> Path:
-    date_str = date[4:].replace('-', '_')
-    time_str = time.replace(':', '_')
+def build_init_path(outdir: Path, assignment_name: str, date_inp, time_inp) -> Path:
+    date_str = date_inp[4:].replace('-', '_')
+    time_str = time_inp.replace(':', '_')
     init_path = outdir / f'{assignment_name}{date_str}_{time_str}'
-    
+
     index = 1
     if init_path.exists():
         new_path = Path(f'{init_path}_iter_{index}')
@@ -365,7 +364,7 @@ def build_init_path(outdir: Path, assignment_name: str, date, time) -> Path:
             new_path = Path(f'{init_path}_iter_{index}')
         return new_path
     return init_path
-    
+
 
 def get_repos(assignment_name: str, org_repos: PaginatedList) -> Iterable:
     '''
@@ -482,7 +481,7 @@ def make_default_config():
 def check_update_available(token: str) -> bool:
     try:
         client = Github(token.strip())
-        repo = client.get_repo('Acher0ns/GradingScripts')
+        repo = client.get_repo('NeonixRIT/GradingScripts')
         releases = repo.get_releases()
         latest = releases[0]
         latest_version = latest.tag_name
@@ -496,7 +495,8 @@ def check_update_available(token: str) -> bool:
             if version_number < latest_version_number:
                 update_print_and_prompt(latest)
                 return True
-            elif version_number > latest_version_number: return False
+            elif version_number > latest_version_number:
+                return False
         return False
     except Exception:
         return False
@@ -529,25 +529,25 @@ def pyversion_short(subprocess: subprocess.Popen):
                 return float(line.split(': ')[1][0:4])
             if 'not found:' in line:
                 raise PyGithubNotFound()
-            
-            
+
+
 def try_alt_pygithub_check():
     '''
     Attempt alternate commands to find proper pygithub version
     '''
     try:
         if is_windows():
-            check_pygithub_version_process = subprocess.Popen(['python', '-m','pip', 'show', 'pygithub'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            check_pygithub_version_process = subprocess.Popen(['python', '-m', 'pip', 'show', 'pygithub'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             if pyversion_short(check_pygithub_version_process) < MIN_PYGITHUB_VERSION:
                 raise InvalidPyGithubVersion(f'Incompatible PyGithub version. Use version {MIN_PYGITHUB_VERSION}+. Use `pip install PyGithub --upgrade` to update')
         else:
-            check_pygithub_version_process = subprocess.Popen(['python3', '-m','pip', 'show', 'pygithub'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            check_pygithub_version_process = subprocess.Popen(['python3', '-m', 'pip', 'show', 'pygithub'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             if pyversion_short(check_pygithub_version_process) < MIN_PYGITHUB_VERSION:
                 raise InvalidPyGithubVersion(f'Incompatible PyGithub version. Use version {MIN_PYGITHUB_VERSION}+. Use `pip install PyGithub --upgrade` to update')
     except FileNotFoundError:
         raise PipNotFound('pip not found.')
-            
-            
+
+
 def check_pygithub_version():
     '''
     Check that PyGithub version is at or above min requirements for script
@@ -583,19 +583,19 @@ def write_avg_insersions_file(initial_path: Path, assignment_name: str):
     return num_of_lines
 
 
-def check_date(date: str):
+def check_date(date_inp: str):
     '''
     Ensure proper date format
     '''
-    if not re.match(r'\d{4}-\d{2}-\d{2}', date):
+    if not re.match(r'\d{4}-\d{2}-\d{2}', date_inp):
         raise InvalidDate('Invalid date format.')
 
 
-def check_time(time: str):
+def check_time(time_inp: str):
     '''
     Ensure proper time format
     '''
-    if not re.match(r'\d{2}:\d{2}', time):
+    if not re.match(r'\d{2}:\d{2}', time_inp):
         raise InvalidTime('Invalid time format.')
 
 
@@ -605,7 +605,7 @@ def check_assignment_name(repos: str):
     '''
     if not repos:
         raise InvalidAssignmentName('Assignment doesn\'t exist.')
-    
+
 
 def attempt_get_assignment():
     '''
@@ -657,8 +657,8 @@ def update_organization(token: str, student_filename: str, output_dir: Path) -> 
     new_organization = input('New Github Organization name: ')
     save_config(token, new_organization, student_filename, output_dir)
     return (token, new_organization, student_filename, output_dir)
-    
-    
+
+
 def update_token(organization: str, student_filename: str, output_dir: Path) -> tuple:
     '''
     Update token string in config.txt file. Return updated config.
@@ -672,9 +672,9 @@ def prompt_invalid_tok_org(exception: Exception, token: str, organization: str, 
     '''
     Prompt user and attempt to fix invalid tokens/organizations in config.txt
     '''
-    ex_type = type(exception)    
+    ex_type = type(exception)
     prompt_str = 'O-Auth token' if ex_type is BadCredentialsException else 'Organization name'
-    
+
     logging.warning(f'Invalid {prompt_str}.')
     print(f'{LIGHT_RED}Invalid {prompt_str}.{WHITE}')
     response = input(f'Would you like to update your {prompt_str} in config.txt? (Y/N): ')
@@ -685,8 +685,8 @@ def prompt_invalid_tok_org(exception: Exception, token: str, organization: str, 
             return update_organization(token, student_filename, output_dir)
     else:
         exit()
-            
-            
+
+
 def attempt_make_client(token: str, organization: str, student_filename: str, output_dir: Path):
     '''
     Attempts to make and return github client for the organization to get repo information with.
@@ -695,7 +695,7 @@ def attempt_make_client(token: str, organization: str, student_filename: str, ou
     attempts = 0
     while attempts < 5:
         try:
-            return Github(token.strip(), pool_size = MAX_THREADS).get_organization(organization.strip())
+            return Github(token.strip(), pool_size=MAX_THREADS).get_organization(organization.strip())
         except (BadCredentialsException, UnknownObjectException) as e:
             token, organization, student_filename, output_dir = prompt_invalid_tok_org(e, token, organization, student_filename, output_dir)
         except Exception as e:
@@ -710,23 +710,23 @@ def print_end_report(students: dict, repos: list, len_not_accepted, cloned_num: 
     '''
     print()
     print(f'{LIGHT_GREEN}Done.{WHITE}')
-    
+
     accept_str = f'{LIGHT_GREEN}{len(students)}{WHITE}' if len_not_accepted == 0 else f'{LIGHT_RED}{len(students) - len_not_accepted}{WHITE}'
     print(f'{LIGHT_GREEN}{accept_str}{LIGHT_GREEN}/{len(students)} accepted the assignment.{WHITE}')
-    
+
     clone_str = f'{LIGHT_GREEN}{cloned_num}{WHITE}' if cloned_num == len(repos) else f'{LIGHT_RED}{cloned_num}{WHITE}'
     print(f'{LIGHT_GREEN}Cloned {clone_str}{LIGHT_GREEN}/{len(repos)} repos.{WHITE}')
-    
+
     rollback_str = f'{LIGHT_GREEN}{rollback_num}{WHITE}' if rollback_num == len(repos) else f'{LIGHT_RED}{rollback_num}{WHITE}'
     print(f'{LIGHT_GREEN}Rolled Back {rollback_str}{LIGHT_GREEN}/{len(repos)} repos.{WHITE}')
-    
+
     lines_str = f'{LIGHT_GREEN}{lines_written}{WHITE}' if lines_written == len(repos) else f'{LIGHT_RED}{lines_written}{WHITE}'
     print(f'{LIGHT_GREEN}Found average lines per commit for {lines_str}{LIGHT_GREEN}/{len(repos)} repos.{WHITE}')
-    
-    
-def log_timing_report(timings: dict, assignment_name:str):
+
+
+def log_timing_report(timings: dict, assignment_name: str):
     logging.info('*** Start Timing report ***')
-    logging.info(f'    Assignment:'.ljust(34) + assignment_name)
+    logging.info('    Assignment:'.ljust(34) + assignment_name)
     for key in timings.keys():
         prefix = f'    {key}:'.ljust(34)
         logging.info(f'{prefix}{str(round(timings[key], 5))}')
@@ -741,29 +741,29 @@ def main():
     '''
     Main function
     '''
-    
+
     '''Timing Variables'''
-    git_check_time = 0
-    pygit_check_time = 0
-    read_config_time = 0
-    update_check_time = 0
-    make_client_time = 0
-    preamble1_total_time = 0
-    
-    preamble2_total_time = 0
-    get_repos_time = 0
-    get_students_time = 0
-    get_repos_w_students_time = 0
-    simple_checks_time = 0
-    make_init_time = 0
-    find_not_accepted_time = 0
-    
-    run_threads_time = 0
-    
-    end_time = 0
-    
-    total_time = 0
-    
+    # git_check_time = 0
+    # pygit_check_time = 0
+    # read_config_time = 0
+    # update_check_time = 0
+    # make_client_time = 0
+    # preamble1_total_time = 0
+
+    # preamble2_total_time = 0
+    # get_repos_time = 0
+    # get_students_time = 0
+    # get_repos_w_students_time = 0
+    # simple_checks_time = 0
+    # make_init_time = 0
+    # find_not_accepted_time = 0
+
+    # run_threads_time = 0
+
+    # end_time = 0
+
+    # total_time = 0
+
     # Enable color in cmd
     if is_windows():
         os.system('color')
@@ -772,29 +772,29 @@ def main():
 
     # Try catch catches errors and sends them to the log file instead of outputting to console
     try:
-        beginning_start = time.perf_counter()
+        # beginning_start = time.perf_counter()
         # Check local git version is compatible with script
         check_git_version()
-        git_check_time = time.perf_counter() - beginning_start
+        # git_check_time = time.perf_counter() - beginning_start
         # Check local PyGithub module version is compatible with script
-        pygit_check_start = time.perf_counter()
+        # pygit_check_start = time.perf_counter()
         check_pygithub_version()
-        pygit_check_time = time.perf_counter() - pygit_check_start
+        # pygit_check_time = time.perf_counter() - pygit_check_start
         # Read config file, if doesn't exist make one using user input.
-        read_config_start = time.perf_counter()
+        # read_config_start = time.perf_counter()
         token, organization, student_filename, output_dir = read_config()
-        read_config_time = time.perf_counter() - read_config_start
-        script_update_start = time.perf_counter()
+        # read_config_time = time.perf_counter() - read_config_start
+        # script_update_start = time.perf_counter()
         check_update_available(token)
-        update_check_time = time.perf_counter() - script_update_start
+        # update_check_time = time.perf_counter() - script_update_start
 
         # Create Organization to access repos, raise errors if invalid token/org
-        make_client_start = time.perf_counter()
+        # make_client_start = time.perf_counter()
         git_org_client = attempt_make_client(token, organization, student_filename, output_dir)
-        make_client_time = time.perf_counter() - make_client_start
+        # make_client_time = time.perf_counter() - make_client_start
 
         org_repos = git_org_client.get_repos()
-        preamble1_total_time = time.perf_counter() - beginning_start
+        # preamble1_total_time = time.perf_counter() - beginning_start
 
         # Variables used to get proper repos
         assignment_name = attempt_get_assignment()
@@ -802,43 +802,43 @@ def main():
         time_due = get_time()
         print() # new line for formatting reasons
 
-        get_repos_start = time.perf_counter()
+        # get_repos_start = time.perf_counter()
         students = dict() # student dict variable do be used im main scope
         repos = get_repos(assignment_name, org_repos)
-        get_repos_time = time.perf_counter() - get_repos_start
-        get_students_start = time.perf_counter()
+        # get_repos_time = time.perf_counter() - get_repos_start
+        # get_students_start = time.perf_counter()
         students = get_students(student_filename) # fill student dict
-        get_students_time = time.perf_counter() - get_students_start
-        get_repos_w_students_start = time.perf_counter()
+        # get_students_time = time.perf_counter() - get_students_start
+        # get_repos_w_students_start = time.perf_counter()
         repos = get_repos_specified_students(repos, students, assignment_name)
-        get_repos_w_students_time = time.perf_counter() - get_repos_w_students_start
+        # get_repos_w_students_time = time.perf_counter() - get_repos_w_students_start
 
-        simple_checks_start = time.perf_counter()
+        # simple_checks_start = time.perf_counter()
         check_time(time_due)
         check_date(date_due)
         check_assignment_name(repos)
-        simple_checks_time = time.perf_counter() - simple_checks_start
+        # simple_checks_time = time.perf_counter() - simple_checks_start
         # Sets path to output directory inside assignment folder where repos will be cloned.
         # Makes parent folder for whole assignment.
-        make_init_start = time.perf_counter()
-        initial_path = build_init_path(output_dir, assignment_name, date_due, time_due)  
+        # make_init_start = time.perf_counter()
+        initial_path = build_init_path(output_dir, assignment_name, date_due, time_due)
         os.mkdir(initial_path)
-        make_init_time = time.perf_counter() - make_init_start
+        # make_init_time = time.perf_counter() - make_init_start
 
         # Print and log students that have not accepted assignment
-        find_not_accepted_start = time.perf_counter()
+        # find_not_accepted_start = time.perf_counter()
         not_accepted = set()
         not_accepted = find_students_not_accepted(students, repos, assignment_name)
         for student in not_accepted:
             print(f'{LIGHT_RED}`{students[student]}` ({student}) did not accept the assignment.{WHITE}')
             logging.info(f'{students[student]}` ({student}) did not accept the assignment `{assignment_name}` by the due date/time.')
-        
+
         if len(not_accepted) != 0:
             print()
-        find_not_accepted_time = time.perf_counter() - find_not_accepted_start
-        preamble2_total_time = time.perf_counter() - get_repos_start
-        
-        run_threads_start = time.perf_counter()
+        # find_not_accepted_time = time.perf_counter() - find_not_accepted_start
+        # preamble2_total_time = time.perf_counter() - get_repos_start
+
+        # run_threads_start = time.perf_counter()
         threads = []
         # goes through list of repos and clones them into the assignment's parent folder
         for repo in repos:
@@ -855,14 +855,14 @@ def main():
         for thread in threads:
             thread.join()
 
-        run_threads_time = time.perf_counter() - run_threads_start
+        # run_threads_time = time.perf_counter() - run_threads_start
 
-        end_start = time.perf_counter()
+        # end_start = time.perf_counter()
         num_of_lines = write_avg_insersions_file(initial_path, assignment_name)
         print_end_report(students, repos, len(not_accepted), cloned_counter.value, rollback_counter.value, num_of_lines)
-        end_time = time.perf_counter() - end_start
-        total_time = preamble1_total_time + preamble2_total_time + run_threads_time + end_time
-        
+        # end_time = time.perf_counter() - end_start
+        # total_time = preamble1_total_time + preamble2_total_time + run_threads_time + end_time
+
         # timing_dict = {
         #     'Check Github Version': git_check_time,
         #     'Check PyGithub Version': pygit_check_time,
@@ -884,7 +884,7 @@ def main():
         # log_timing_report(timing_dict, assignment_name)
     except Exception as e:
         logging.warning(f'{type(e)}: {e}')
-        print() 
+        print()
         try:
             print(f'{LIGHT_RED}{e.message}{WHITE}')
         except Exception:

@@ -6,18 +6,18 @@ import pathlib as path
 
 
 def print_help():
-    print(f'Usage: ./cloneScript.py <assignment name> <due date> <due time> [folder name]')
-    print(f'    <assignment name>:'.ljust(25), 'Set assignment name. Same as repo prefix in organization')
-    print(f'    <due date>:'.ljust(25), 'due date of assignment in yyyy-mm-dd format.')
-    print(f'    <due time>:'.ljust(25), 'due time of assignment in HH:MM 24hr format.')
-    print(f'    [folder name]:'.ljust(25), 'OPTIONAL. Changes output folder name from default assignment name')
+    print('Usage: ./cloneScript.py <assignment name> <due date> <due time> [folder name]')
+    print('    <assignment name>:'.ljust(25), 'Set assignment name. Same as repo prefix in organization')
+    print('    <due date>:'.ljust(25), 'due date of assignment in yyyy-mm-dd format.')
+    print('    <due time>:'.ljust(25), 'due time of assignment in HH:MM 24hr format.')
+    print('    [folder name]:'.ljust(25), 'OPTIONAL. Changes output folder name from default assignment name')
 
 
 def parse_args(args: list):
     if (len(args) < 4) or (args[1] == '-help' or args[1] == '-h' or args[1] == '-?' or args[1] == '?') or (len(args) > 5):
         print_help()
         raise rh.InvalidArguments()
-        
+
     assignment_name = args[1]
     date_due = args[2]
     time_due = args[3]
@@ -26,7 +26,7 @@ def parse_args(args: list):
 
     if len(args) == 5:
         out_folder = args[4]
-        
+
     return assignment_name, date_due, time_due, out_folder
 
 
@@ -42,7 +42,7 @@ def build_init_path_given_out(output_dir: path.Path, out_folder: str):
     return path.Path(init_path)
 
 
-def main(args, token = None, org = None, student_filename = None):
+def main(args, token=None, org=None, student_filename=None):
     '''
     Main function
     '''
@@ -60,7 +60,7 @@ def main(args, token = None, org = None, student_filename = None):
         # Check local PyGithub module version is compatible with script
         rh.check_pygithub_version()
         # Read config file, if doesn't exist make one using user input.
-        if token != None and org != None and student_filename != None:
+        if token is not None and org is not None and student_filename is not None:
             _, _, _, output_dir = rh.read_config()
         else:
             token, org, student_filename, output_dir = rh.read_config()
@@ -82,11 +82,11 @@ def main(args, token = None, org = None, student_filename = None):
         rh.check_assignment_name(repos)
         # Sets path to output directory inside assignment folder where repos will be cloned.
         # Makes parent folder for whole assignment.
-        initial_path = rh.build_init_path(output_dir, assignment_name, date_due, time_due)  
+        initial_path = rh.build_init_path(output_dir, assignment_name, date_due, time_due)
 
         if out_folder:
             initial_path = build_init_path_given_out(output_dir, out_folder)
-            
+
         os.mkdir(initial_path)
 
         # Print and log students that have not accepted assignment
@@ -95,7 +95,7 @@ def main(args, token = None, org = None, student_filename = None):
             print(f'{rh.LIGHT_RED}`{students[student]}` ({student}) did not accept the assignment.{rh.WHITE}')
             logging.info(f'{students[student]}` ({student}) did not accept the assignment `{assignment_name}` by the due date/time.')
         print()
-            
+
         threads = []
         # goes through list of repos and clones them into the assignment's parent folder
         for repo in repos:
@@ -116,7 +116,7 @@ def main(args, token = None, org = None, student_filename = None):
         rh.print_end_report(students, repos, len(not_accepted), rh.cloned_counter.value, rh.rollback_counter.value, num_of_lines)
     except Exception as e:
         logging.error(e)
-        print() 
+        print()
         try:
             print(f'{rh.LIGHT_RED}{e.message}{rh.WHITE}')
         except Exception:
