@@ -19,7 +19,7 @@ Script to clone all or some repositories in a Github Organization based on repo 
 AVERAGE_LINES_FILENAME = 'avgLinesInserted.txt'
 CONFIG_PATH = 'tmp/config.txt' # Stores token, org name, save class roster bool, class roster path, output dir
 BASE_GITHUB_LINK = 'https://github.com'
-SCRIPT_VERSION = '1.0.1'
+SCRIPT_VERSION = '1.0.2'
 MIN_GIT_VERSION = 2.30 # Required 2.30 minimum because of authentication changes
 MIN_PYGITHUB_VERSION = 1.55 # Requires 1.55 to allow threading
 MAX_THREADS = 200 # Max number of concurrent cloning processes
