@@ -264,7 +264,7 @@ class RepoHandler(threading.Thread):
 
         clone_url = self.__repo.clone_url.replace('https://', f'https://{self.__token}@')
         three_day_history = str(datetime.strptime(self.__date_due, '%Y-%m-%d') - timedelta(days=3))
-        clone_process = subprocess.Popen(['git', 'clone', clone_url, '--single-branch', f'--shallow-since="{three_day_history}"', f'{str(self.__repo_path)}'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT) # git clone to output file, Hides output from console
+        clone_process = subprocess.Popen(['git', 'clone', clone_url, '--single-branch', f'{str(self.__repo_path)}'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT) # git clone to output file, Hides output from console
         try:
             self.log_errors_given_subprocess(clone_process) # reads output line by line and checks for errors that occured during cloning
         except GithubException:
@@ -748,7 +748,7 @@ def log_timing_report(timings: dict, assignment_name: str):
     logging.info('*** End Timing report ***')
 
  
-def onerror(func, path, exc_info):
+def onerror(func, path: str, exc_info) -> None:
     import stat
     if not os.access(path, os.W_OK):
         os.chmod(path, stat.S_IWUSR)
@@ -757,8 +757,16 @@ def onerror(func, path, exc_info):
         raise
 
 
-def delete_repo_on_error(path, onerror=onerror):
+def delete_repo_on_error(path: str, onerror=onerror) -> None:
     shutil.rmtree(path, onerror=onerror)
+
+
+def extract_data_folder(initial_path, data_folder_name='data'):
+    repos = os.listdir(initial_path)
+    repo_to_check = repos[len(repos) - 1]
+    folders = os.listdir(Path(initial_path) / repo_to_check)
+    if data_folder_name in folders:
+        shutil.move(f'{str(Path(initial_path) / repo_to_check)}/{data_folder_name}', initial_path)
 
 
 rollback_counter = AtomicCounter()
@@ -839,6 +847,7 @@ def main():
 
         num_of_lines = write_avg_insersions_file(initial_path, assignment_name)
         print_end_report(students, repos, len(not_accepted), cloned_counter.value, rollback_counter.value, num_of_lines)
+        extract_data_folder(initial_path)
     except Exception as e:
         logging.warning(f'{type(e)}: {e}')
         print()
