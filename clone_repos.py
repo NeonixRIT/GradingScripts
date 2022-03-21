@@ -2,10 +2,11 @@ import csv
 import logging
 import os
 import re
+import shutil
 import subprocess
 import threading
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Iterable
 from github import Github, BadCredentialsException, UnknownObjectException
 from github.PaginatedList import PaginatedList
@@ -177,7 +178,7 @@ class RepoHandler(threading.Thread):
 
     Each thread only clones one repo.
     '''
-    __slots___ = ['__repo', '__assignment_name', '__date_due', '__time_due', '__students', '__initial_path', '__repo_path', '__token', '__new_repo_name']
+    __slots___ = ['__repo', '__assignment_name', '__date_due', '__time_due', '__students', '__initial_path', '__repo_path', '__token', '__new_repo_name', '__is_cloned']
 
 
     def __init__(self, repo: Repository, assignment_name: str, date_due: str, time_due: str, students: dict, initial_path: Path, token: str):
@@ -190,6 +191,7 @@ class RepoHandler(threading.Thread):
         self.__new_repo_name = get_new_repo_name(self.__repo, self.__students, self.__assignment_name)
         self.__repo_path = self.__initial_path / self.__new_repo_name # replace repo name when cloning to have student's real name
         self.__token = token
+        self.__is_cloned = False
         super().__init__()
 
 
@@ -200,7 +202,9 @@ class RepoHandler(threading.Thread):
         try:
             # If no commits, skip repo
             try:
-                len(list(self.__repo.get_commits()))
+                student_commits = len(list(self.__repo.get_commits())) - 1
+                if student_commits == 0:
+                    raise CloneException()
             except Exception:
                 print(f'{LIGHT_RED}Skipping `{self.__repo.name}` because it has 0 commits.{WHITE}')
                 logging.warning(f'Skipping repo `{self.__repo.name}` because it has 0 commits.')
@@ -215,13 +219,20 @@ class RepoHandler(threading.Thread):
         except GithubException as ge:
             print(f'{LIGHT_RED}Skipping repo `{self.__repo.name}` because: {ge.message}{WHITE}')
             logging.warning(f'{self.__repo.name}: {ge}')
+            try:
+                if self.__is_cloned:
+                    delete_repo_on_error(self.__repo_path)
+            except:
+                print(f'{LIGHT_RED}Failed to delete skipped repo.{WHITE}')
 
 
     def run_raise(self):
         try:
             # If no commits, skip repo
             try:
-                len(list(self.__repo.get_commits()))
+                student_commits = len(list(self.__repo.get_commits())) - 1
+                if student_commits == 0:
+                    raise CloneException()
             except Exception:
                 print(f'{LIGHT_RED}Skipping `{self.__repo.name}` because it has 0 commits.{WHITE}')
                 logging.warning(f'Skipping repo `{self.__repo.name}` because it has 0 commits.')
@@ -236,6 +247,8 @@ class RepoHandler(threading.Thread):
         except GithubException as ge:
             print(f'{LIGHT_RED}Skipping repo `{self.__repo.name}` because: {ge.message}{WHITE}')
             logging.warning(f'{self.__repo.name}: {ge}')
+            if self.__is_cloned:
+                delete_repo_on_error(self.__repo_path)
             raise ge
 
 
@@ -250,12 +263,14 @@ class RepoHandler(threading.Thread):
         # run process on system that executes 'git clone' command. stdout is redirected so it doesn't output to end user
 
         clone_url = self.__repo.clone_url.replace('https://', f'https://{self.__token}@')
-        clone_process = subprocess.Popen(['git', 'clone', clone_url, f'{str(self.__repo_path)}'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT) # git clone to output file, Hides output from console
+        three_day_history = str(datetime.strptime(self.__date_due, '%Y-%m-%d') - timedelta(days=3))
+        clone_process = subprocess.Popen(['git', 'clone', clone_url, '--single-branch', f'--shallow-since="{three_day_history}"', f'{str(self.__repo_path)}'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT) # git clone to output file, Hides output from console
         try:
             self.log_errors_given_subprocess(clone_process) # reads output line by line and checks for errors that occured during cloning
         except GithubException:
             logging.warning('Clone failed (likely due to invalid filename).') # log error to log file
             raise CloneException('Clone failed (likely due to invalid filename).')
+        self.__is_cloned = True
 
 
     def get_commit_hash(self) -> str:
@@ -732,6 +747,19 @@ def log_timing_report(timings: dict, assignment_name: str):
         logging.info(f'{prefix}{str(round(timings[key], 5))}')
     logging.info('*** End Timing report ***')
 
+ 
+def onerror(func, path, exc_info):
+    import stat
+    if not os.access(path, os.W_OK):
+        os.chmod(path, stat.S_IWUSR)
+        func(path)
+    else:
+        raise
+
+
+def delete_repo_on_error(path, onerror=onerror):
+    shutil.rmtree(path, onerror=onerror)
+
 
 rollback_counter = AtomicCounter()
 cloned_counter = AtomicCounter()
@@ -742,28 +770,6 @@ def main():
     Main function
     '''
 
-    '''Timing Variables'''
-    # git_check_time = 0
-    # pygit_check_time = 0
-    # read_config_time = 0
-    # update_check_time = 0
-    # make_client_time = 0
-    # preamble1_total_time = 0
-
-    # preamble2_total_time = 0
-    # get_repos_time = 0
-    # get_students_time = 0
-    # get_repos_w_students_time = 0
-    # simple_checks_time = 0
-    # make_init_time = 0
-    # find_not_accepted_time = 0
-
-    # run_threads_time = 0
-
-    # end_time = 0
-
-    # total_time = 0
-
     # Enable color in cmd
     if is_windows():
         os.system('color')
@@ -772,29 +778,19 @@ def main():
 
     # Try catch catches errors and sends them to the log file instead of outputting to console
     try:
-        # beginning_start = time.perf_counter()
         # Check local git version is compatible with script
         check_git_version()
-        # git_check_time = time.perf_counter() - beginning_start
         # Check local PyGithub module version is compatible with script
-        # pygit_check_start = time.perf_counter()
         check_pygithub_version()
-        # pygit_check_time = time.perf_counter() - pygit_check_start
         # Read config file, if doesn't exist make one using user input.
-        # read_config_start = time.perf_counter()
         token, organization, student_filename, output_dir = read_config()
-        # read_config_time = time.perf_counter() - read_config_start
-        # script_update_start = time.perf_counter()
+        # Check if update is available for the script and print the description
         check_update_available(token)
-        # update_check_time = time.perf_counter() - script_update_start
 
         # Create Organization to access repos, raise errors if invalid token/org
-        # make_client_start = time.perf_counter()
         git_org_client = attempt_make_client(token, organization, student_filename, output_dir)
-        # make_client_time = time.perf_counter() - make_client_start
 
         org_repos = git_org_client.get_repos()
-        # preamble1_total_time = time.perf_counter() - beginning_start
 
         # Variables used to get proper repos
         assignment_name = attempt_get_assignment()
@@ -802,31 +798,20 @@ def main():
         time_due = get_time()
         print() # new line for formatting reasons
 
-        # get_repos_start = time.perf_counter()
         students = dict() # student dict variable do be used im main scope
         repos = get_repos(assignment_name, org_repos)
-        # get_repos_time = time.perf_counter() - get_repos_start
-        # get_students_start = time.perf_counter()
         students = get_students(student_filename) # fill student dict
-        # get_students_time = time.perf_counter() - get_students_start
-        # get_repos_w_students_start = time.perf_counter()
         repos = get_repos_specified_students(repos, students, assignment_name)
-        # get_repos_w_students_time = time.perf_counter() - get_repos_w_students_start
 
-        # simple_checks_start = time.perf_counter()
         check_time(time_due)
         check_date(date_due)
         check_assignment_name(repos)
-        # simple_checks_time = time.perf_counter() - simple_checks_start
         # Sets path to output directory inside assignment folder where repos will be cloned.
         # Makes parent folder for whole assignment.
-        # make_init_start = time.perf_counter()
         initial_path = build_init_path(output_dir, assignment_name, date_due, time_due)
         os.mkdir(initial_path)
-        # make_init_time = time.perf_counter() - make_init_start
 
         # Print and log students that have not accepted assignment
-        # find_not_accepted_start = time.perf_counter()
         not_accepted = set()
         not_accepted = find_students_not_accepted(students, repos, assignment_name)
         for student in not_accepted:
@@ -835,10 +820,7 @@ def main():
 
         if len(not_accepted) != 0:
             print()
-        # find_not_accepted_time = time.perf_counter() - find_not_accepted_start
-        # preamble2_total_time = time.perf_counter() - get_repos_start
 
-        # run_threads_start = time.perf_counter()
         threads = []
         # goes through list of repos and clones them into the assignment's parent folder
         for repo in repos:
@@ -855,33 +837,8 @@ def main():
         for thread in threads:
             thread.join()
 
-        # run_threads_time = time.perf_counter() - run_threads_start
-
-        # end_start = time.perf_counter()
         num_of_lines = write_avg_insersions_file(initial_path, assignment_name)
         print_end_report(students, repos, len(not_accepted), cloned_counter.value, rollback_counter.value, num_of_lines)
-        # end_time = time.perf_counter() - end_start
-        # total_time = preamble1_total_time + preamble2_total_time + run_threads_time + end_time
-
-        # timing_dict = {
-        #     'Check Github Version': git_check_time,
-        #     'Check PyGithub Version': pygit_check_time,
-        #     'Read Config File': read_config_time,
-        #     'Update Check': update_check_time,
-        #     'Make Github Client': make_client_time,
-        #     'Preamble 1 Time': preamble1_total_time,
-        #     'Build Students Dict': get_students_time,
-        #     'Get Repos': get_repos_time,
-        #     'Get Repo Student\'s Repos': get_repos_w_students_time,
-        #     'Simple Checks': simple_checks_time,
-        #     'Make Initial Directory': make_init_time,
-        #     'Find Not Accepted Students': find_not_accepted_time,
-        #     'Preamble 2 Time': preamble2_total_time,
-        #     'Handle All Repos Time': run_threads_time,
-        #     'End Time': end_time,
-        #     'Total Time': total_time
-        #                }
-        # log_timing_report(timing_dict, assignment_name)
     except Exception as e:
         logging.warning(f'{type(e)}: {e}')
         print()
