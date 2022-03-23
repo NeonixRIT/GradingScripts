@@ -101,4 +101,8 @@ Usage: ./cloneScript.py <assignment name> <due date> <due time> [folder name]
 ```
 
 
-## Congratulations! You’ve either read or skimmed through my entire guide. May your grading be easy and enjoyable thanks to these scripts! 
+## Congratulations! You’ve either read or skimmed through my entire guide. May your grading be easy and enjoyable thanks to these scripts!
+
+### TODO
+ - Add tests for student repo with no commits
+ - Add test for timezone fix

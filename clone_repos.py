@@ -6,7 +6,7 @@ import shutil
 import subprocess
 import threading
 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from typing import Iterable
 from github import Github, BadCredentialsException, UnknownObjectException
 from github.PaginatedList import PaginatedList
@@ -19,7 +19,7 @@ Script to clone all or some repositories in a Github Organization based on repo 
 AVERAGE_LINES_FILENAME = 'avgLinesInserted.txt'
 CONFIG_PATH = 'tmp/config.txt' # Stores token, org name, save class roster bool, class roster path, output dir
 BASE_GITHUB_LINK = 'https://github.com'
-SCRIPT_VERSION = '1.0.2'
+SCRIPT_VERSION = '1.0.3'
 MIN_GIT_VERSION = 2.30 # Required 2.30 minimum because of authentication changes
 MIN_PYGITHUB_VERSION = 1.55 # Requires 1.55 to allow threading
 MAX_THREADS = 200 # Max number of concurrent cloning processes
@@ -222,11 +222,14 @@ class RepoHandler(threading.Thread):
             try:
                 if self.__is_cloned:
                     delete_repo_on_error(self.__repo_path)
-            except:
+            except Exception:
                 print(f'{LIGHT_RED}Failed to delete skipped repo.{WHITE}')
 
 
     def run_raise(self):
+        '''
+        Sepatate run method used for unit testing
+        '''
         try:
             # If no commits, skip repo
             try:
@@ -263,7 +266,6 @@ class RepoHandler(threading.Thread):
         # run process on system that executes 'git clone' command. stdout is redirected so it doesn't output to end user
 
         clone_url = self.__repo.clone_url.replace('https://', f'https://{self.__token}@')
-        three_day_history = str(datetime.strptime(self.__date_due, '%Y-%m-%d') - timedelta(days=3))
         clone_process = subprocess.Popen(['git', 'clone', clone_url, '--single-branch', f'{str(self.__repo_path)}'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT) # git clone to output file, Hides output from console
         try:
             self.log_errors_given_subprocess(clone_process) # reads output line by line and checks for errors that occured during cloning
@@ -278,7 +280,7 @@ class RepoHandler(threading.Thread):
         Get commit hash at timestamp and reset local repo to timestamp on the default branch
         '''
         # run process on system that executes 'git rev-list' command. stdout is redirected so it doesn't output to end user
-        rev_list_process = subprocess.Popen(['git', 'rev-list', '-n', '1', f'--before="{self.__date_due.strip()} {self.__time_due.strip()}"', f'origin/{self.__repo.default_branch}'], cwd=self.__repo_path, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        rev_list_process = subprocess.Popen(['git', 'rev-list', '-n', '1', '--date=local', f'--before="{self.__date_due.strip()} {self.__time_due.strip()}"', f'origin/{self.__repo.default_branch}'], cwd=self.__repo_path, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         with rev_list_process: # Read rev list output line by line to search for error or commit hash
             for line in iter(rev_list_process.stdout.readline, b''): # b'\n'-separated lines
                 line = line.decode()
@@ -747,7 +749,7 @@ def log_timing_report(timings: dict, assignment_name: str):
         logging.info(f'{prefix}{str(round(timings[key], 5))}')
     logging.info('*** End Timing report ***')
 
- 
+
 def onerror(func, path: str, exc_info) -> None:
     import stat
     if not os.access(path, os.W_OK):
