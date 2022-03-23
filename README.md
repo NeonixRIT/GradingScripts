@@ -106,3 +106,7 @@ Usage: ./cloneScript.py <assignment name> <due date> <due time> [folder name]
 ### TODO
  - Add tests for student repo with no commits
  - Add test for timezone fix
+ - Add test for data folder extraction
+ - Add tests for update functions
+ - Add tests for version class
+ - Add tests for AtomicCounter class

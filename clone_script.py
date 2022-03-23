@@ -65,7 +65,7 @@ def main(args, token=None, org=None, student_filename=None):
         else:
             token, org, student_filename, output_dir = rh.read_config()
 
-        rh.check_update_available(token)
+        rh.check_and_print_updates(token)
 
         # Create Organization to access repos
         git_org_client = rh.attempt_make_client(token, org, student_filename, output_dir)

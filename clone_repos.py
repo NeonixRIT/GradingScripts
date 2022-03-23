@@ -19,7 +19,6 @@ Script to clone all or some repositories in a Github Organization based on repo 
 AVERAGE_LINES_FILENAME = 'avgLinesInserted.txt'
 CONFIG_PATH = 'tmp/config.txt' # Stores token, org name, save class roster bool, class roster path, output dir
 BASE_GITHUB_LINK = 'https://github.com'
-SCRIPT_VERSION = '1.0.3'
 MIN_GIT_VERSION = 2.30 # Required 2.30 minimum because of authentication changes
 MIN_PYGITHUB_VERSION = 1.55 # Requires 1.55 to allow threading
 MAX_THREADS = 200 # Max number of concurrent cloning processes
@@ -150,6 +149,43 @@ class OrganizationNotFound(UserError):
         super().__init__(message)
 
 
+class Version:
+    __slots__ = ['__version_list', '__version_str']
+    
+    def __init__(self, version='0.0.0'):
+        self.__version_str = version
+        self.__version_list = list(version.split('.'))
+        
+        
+    def __str__(self):
+        return self.__version_str
+    
+    
+    def __repr__(self):
+        return f'Version[{self.__version_str}, {self.__version_list}]'
+        
+        
+    def __lt__(self, other):
+        for i in range(len(self.__version_list)):
+            version_number = int(self.__version_list[i])
+            latest_version_number = int(other.__version_list[i])
+            if version_number < latest_version_number:
+                return True
+            elif version_number > latest_version_number:
+                return False
+        return False
+
+    
+    def __eq__(self, other):
+        if type(other) != Version:
+            return False
+        
+        return repr(self) == repr(other)
+
+
+SCRIPT_VERSION = Version('1.0.4')
+
+
 class AtomicCounter:
     '''
     Simple Thread safe integer
@@ -264,7 +300,6 @@ class RepoHandler(threading.Thread):
         '''
         print(f'Cloning {self.__repo.name} into {self.__repo_path}...') # tell end user what repo is being cloned and where it is going to
         # run process on system that executes 'git clone' command. stdout is redirected so it doesn't output to end user
-
         clone_url = self.__repo.clone_url.replace('https://', f'https://{self.__token}@')
         clone_process = subprocess.Popen(['git', 'clone', clone_url, '--single-branch', f'{str(self.__repo_path)}'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT) # git clone to output file, Hides output from console
         try:
@@ -478,7 +513,7 @@ def read_config() -> tuple:
     return (token, organization, student_filename, output_dir)
 
 
-def make_default_config():
+def make_default_config() -> None:
     '''
     Creates a default config file getting access token, org, class roster, etc, from user input
     '''
@@ -495,33 +530,30 @@ def make_default_config():
     save_config(token, organization, student_filename, output_dir)
 
 
-def check_update_available(token: str) -> bool:
+def is_update_available(latest_release) -> bool:
     try:
-        client = Github(token.strip())
-        repo = client.get_repo('NeonixRIT/GradingScripts')
-        releases = repo.get_releases()
-        latest = releases[0]
-        latest_version = latest.tag_name
-
-        version_split = SCRIPT_VERSION.split('.')
-        latest_version_split = latest_version.split('.')
-
-        for i in range(len(version_split)):
-            version_number = int(version_split[i])
-            latest_version_number = int(latest_version_split[i])
-            if version_number < latest_version_number:
-                update_print_and_prompt(latest)
-                return True
-            elif version_number > latest_version_number:
-                return False
-        return False
+        latest_version = Version(latest_release.tag_name)
+        return SCRIPT_VERSION < latest_version
     except Exception:
         return False
 
 
-def update_print_and_prompt(latest_release):
-    print(f'{LIGHT_GREEN}An upadate is available. {SCRIPT_VERSION} -> {latest_release.tag_name}\nDescription:\n{latest_release.body}\n{WHITE}')
+def print_release_changes_since_update(releases) -> None:
+    print(f'{LIGHT_GREEN}An upadate is available. {SCRIPT_VERSION} -> {releases[0].tag_name}{WHITE}')
+    for release in list(releases)[::-1]:
+        release_version = Version(release.tag_name)
+        if release_version > SCRIPT_VERSION:
+            print(f'{LIGHT_GREEN}Version: {release_version}\nDescription:\n{release.body}\n{WHITE}')
+    
 
+def check_and_print_updates(token: str):
+    client = Github(token.strip())
+    repo = client.get_repo('NeonixRIT/GradingScripts')
+    releases = repo.get_releases()
+    latest = releases[0]
+    if is_update_available(latest):
+        print_release_changes_since_update(releases)
+    
 
 def check_git_version():
     '''
@@ -795,7 +827,7 @@ def main():
         # Read config file, if doesn't exist make one using user input.
         token, organization, student_filename, output_dir = read_config()
         # Check if update is available for the script and print the description
-        check_update_available(token)
+        check_and_print_updates(token)
 
         # Create Organization to access repos, raise errors if invalid token/org
         git_org_client = attempt_make_client(token, organization, student_filename, output_dir)
