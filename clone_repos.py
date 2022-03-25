@@ -1,10 +1,10 @@
+import asyncio
 import csv
 import logging
 import os
 import re
 import shutil
 import subprocess
-import threading
 
 from datetime import date, datetime
 from typing import Iterable
@@ -16,7 +16,6 @@ from pathlib import Path
 Script to clone all or some repositories in a Github Organization based on repo prefix and usernames
 @authors  Kamron Cole kjc8084@rit.edu, Trey Pachucki ttp2542@g.rit.edu
 '''
-AVERAGE_LINES_FILENAME = 'avgLinesInserted.txt'
 CONFIG_PATH = 'tmp/config.txt' # Stores token, org name, save class roster bool, class roster path, output dir
 BASE_GITHUB_LINK = 'https://github.com'
 MIN_GIT_VERSION = 2.30 # Required 2.30 minimum because of authentication changes
@@ -26,7 +25,6 @@ LOG_FILE_PATH = 'tmp/logs.log' # where the log file goes
 LIGHT_GREEN = '\033[1;32m' # Ansi code for light_green
 LIGHT_RED = '\033[1;31m' # Ansi code for light_red
 WHITE = '\033[0m' # Ansi code for white to reset back to normal text
-AVG_INSERTIONS_DICT = dict() # Global dict that threads map repos to average lines of code per commit
 
 
 '''
@@ -150,21 +148,25 @@ class OrganizationNotFound(UserError):
 
 
 class Version:
+    '''
+    Object representing a version number used to make comparing and printing script versions easier
+    '''
     __slots__ = ['__version_list', '__version_str']
-    
+
+
     def __init__(self, version='0.0.0'):
         self.__version_str = version
         self.__version_list = list(version.split('.'))
-        
-        
+
+
     def __str__(self):
         return self.__version_str
-    
-    
+
+
     def __repr__(self):
         return f'Version[{self.__version_str}, {self.__version_list}]'
-        
-        
+
+
     def __lt__(self, other):
         for i in range(len(self.__version_list)):
             version_number = int(self.__version_list[i])
@@ -175,228 +177,109 @@ class Version:
                 return False
         return False
 
-    
+
     def __eq__(self, other):
         if type(other) != Version:
             return False
-        
+
         return repr(self) == repr(other)
 
 
-SCRIPT_VERSION = Version('1.0.4')
+SCRIPT_VERSION = Version('1.1.0')
 
 
-class AtomicCounter:
+async def run(cmd: str, cwd=os.getcwd()) -> None:
     '''
-    Simple Thread safe integer
+    Asyncronously start a subprocess and run a command returning its output
     '''
-    __slots__ = ['value', '_lock']
+    proc = await asyncio.create_subprocess_shell(
+        cmd,
+        cwd=cwd,
+        stderr=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.PIPE
+    )
+
+    stdout, stderr = await proc.communicate()
+
+    return stdout.decode().strip() if stdout else None, stderr.decode().strip() if stderr else None
 
 
-    def __init__(self, initial=0):
-        """Initialize a new atomic counter to given initial value (default 0)."""
-        self.value = initial
-        self._lock = threading.Lock()
-
-
-    def increment(self, num=1):
-        """Atomically increment the counter by num (default 1) and return the
-        new value.
-        """
-        with self._lock:
-            self.value += num
-            return self.value
-
-
-class RepoHandler(threading.Thread):
+async def log_info(msg: str, hint: str, repo, exception: Exception = None) -> None:
     '''
-    A Thread that clones a repo, resets it to specific time, and gets average number of lines per commit
-
-    Each thread only clones one repo.
+    Helper Function for logging errors to the log file
     '''
-    __slots___ = ['__repo', '__assignment_name', '__date_due', '__time_due', '__students', '__initial_path', '__repo_path', '__token', '__new_repo_name', '__is_cloned']
+    exception_str = exception if exception is not None else ''
+    logging.info(
+        f'{msg}:\n' + f'  {repr(repo)}\n' + f'  {hint}\n' + f'  {exception_str}\n\n'
+    )
 
 
-    def __init__(self, repo: Repository, assignment_name: str, date_due: str, time_due: str, students: dict, initial_path: Path, token: str):
-        self.__repo = repo # PyGithub repo object
-        self.__assignment_name = assignment_name # Repo name prefix
-        self.__date_due = date_due
-        self.__time_due = time_due
-        self.__students = students
-        self.__initial_path = initial_path
-        self.__new_repo_name = get_new_repo_name(self.__repo, self.__students, self.__assignment_name)
-        self.__repo_path = self.__initial_path / self.__new_repo_name # replace repo name when cloning to have student's real name
-        self.__token = token
-        self.__is_cloned = False
-        super().__init__()
+def onerror(func, path: str, exc_info) -> None:
+    import stat
+    if not os.access(path, os.W_OK):
+        os.chmod(path, stat.S_IWUSR)
+        func(path)
+    else:
+        raise
 
 
-    def run(self):
-        '''
-        Clones given repo and renames destination to student real name if class roster is provided.
-        '''
-        try:
-            # If no commits, skip repo
-            try:
-                student_commits = len(list(self.__repo.get_commits())) - 1
-                if student_commits == 0:
-                    raise CloneException()
-            except Exception:
-                print(f'{LIGHT_RED}Skipping `{self.__repo.name}` because it has 0 commits.{WHITE}')
-                logging.warning(f'Skipping repo `{self.__repo.name}` because it has 0 commits.')
-                return
+class LocalRepo:
+    '''
+    Object representing a cloned repo
+    '''
+    __slots__ = ['__path', '__old_name', '__new_name']
 
-            self.clone_repo() # clones repo
-            cloned_counter.increment()
-            commit_hash = self.get_commit_hash() # get commit hash at due date
-            self.rollback_repo(commit_hash) # rollback repo to commit hash
-            rollback_counter.increment()
-            self.get_repo_stats() # get average lines per commit
-        except GithubException as ge:
-            print(f'{LIGHT_RED}Skipping repo `{self.__repo.name}` because: {ge.message}{WHITE}')
-            logging.warning(f'{self.__repo.name}: {ge}')
-            try:
-                if self.__is_cloned:
-                    delete_repo_on_error(self.__repo_path)
-            except Exception:
-                print(f'{LIGHT_RED}Failed to delete skipped repo.{WHITE}')
+    def __init__(self, path: str, old_name: str, new_name: str):
+        self.__path = path
+        self.__old_name = old_name
+        self.__new_name = new_name
 
 
-    def run_raise(self):
-        '''
-        Sepatate run method used for unit testing
-        '''
-        try:
-            # If no commits, skip repo
-            try:
-                student_commits = len(list(self.__repo.get_commits())) - 1
-                if student_commits == 0:
-                    raise CloneException()
-            except Exception:
-                print(f'{LIGHT_RED}Skipping `{self.__repo.name}` because it has 0 commits.{WHITE}')
-                logging.warning(f'Skipping repo `{self.__repo.name}` because it has 0 commits.')
-                return
-
-            self.clone_repo() # clones repo
-            cloned_counter.increment()
-            commit_hash = self.get_commit_hash() # get commit hash at due date
-            self.rollback_repo(commit_hash) # rollback repo to commit hash
-            rollback_counter.increment()
-            self.get_repo_stats() # get average lines per commit
-        except GithubException as ge:
-            print(f'{LIGHT_RED}Skipping repo `{self.__repo.name}` because: {ge.message}{WHITE}')
-            logging.warning(f'{self.__repo.name}: {ge}')
-            if self.__is_cloned:
-                delete_repo_on_error(self.__repo_path)
-            raise ge
+    def __str__(self) -> str:
+        return self.__new_name
 
 
-    def clone_repo(self):
-        '''
-        Clones a repo into the assignment folder.
-
-        Due to some weird authentication issues. Git clone might need to have the github link with the token passed e.g.
-        https://www.<token>@github.com/<organization>/<Repository.name>
-        '''
-        print(f'Cloning {self.__repo.name} into {self.__repo_path}...') # tell end user what repo is being cloned and where it is going to
-        # run process on system that executes 'git clone' command. stdout is redirected so it doesn't output to end user
-        clone_url = self.__repo.clone_url.replace('https://', f'https://{self.__token}@')
-        clone_process = subprocess.Popen(['git', 'clone', clone_url, '--single-branch', f'{str(self.__repo_path)}'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT) # git clone to output file, Hides output from console
-        try:
-            self.log_errors_given_subprocess(clone_process) # reads output line by line and checks for errors that occured during cloning
-        except GithubException:
-            logging.warning('Clone failed (likely due to invalid filename).') # log error to log file
-            raise CloneException('Clone failed (likely due to invalid filename).')
-        self.__is_cloned = True
+    def __repr__(self) -> str:
+        return f'LocalRepo[path={self.__path}, old_name={self.__old_name}, new_name={self.__new_name}]'
 
 
-    def get_commit_hash(self) -> str:
+    async def get_commit_hash(self, date_due: str, time_due: str) -> str:
         '''
         Get commit hash at timestamp and reset local repo to timestamp on the default branch
         '''
-        # run process on system that executes 'git rev-list' command. stdout is redirected so it doesn't output to end user
-        rev_list_process = subprocess.Popen(['git', 'rev-list', '-n', '1', '--date=local', f'--before="{self.__date_due.strip()} {self.__time_due.strip()}"', f'origin/{self.__repo.default_branch}'], cwd=self.__repo_path, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-        with rev_list_process: # Read rev list output line by line to search for error or commit hash
-            for line in iter(rev_list_process.stdout.readline, b''): # b'\n'-separated lines
-                line = line.decode()
-                try:
-                    self.log_errors_given_line(line) # if command returned error raise exception
-                except GithubException:
-                    logging.warning('Error occured while retrieving commit hash at time/date (likely due to student accepting assignment after given date/time).')
-                    raise RevlistException('Error occured while retrieving commit hash at time/date (likely due to student accepting assignment after given date/time).')
-                return line.strip() # else returns commit hash of repo at timestamp
+        try:
+            # run process on system that executes 'git rev-list' command. stdout is redirected so it doesn't output to end user
+            cmd = f'git log --max-count=1 --date=local --before="{date_due.strip()} {time_due.strip()}" --format=%H'
+            stdout, _ = await run(cmd, self.__path)
+            return stdout
+        except Exception as e:
+            print(f'{LIGHT_RED}[{self}] Get Commit Hash Failed: Likely accepted assignment after given date/time.{WHITE}')
+            await log_info('Get Commit Hash Failed', 'Likely accepted assignment after given date/time.', self, e)
+            return None
 
 
-    def rollback_repo(self, commit_hash):
+    async def rollback(self, commit_hash: str) -> bool:
         '''
         Use commit hash and reset local repo to that commit (use git reset instead of git checkout to remove detached head warning)
         '''
-        if not commit_hash:
-            raise RollbackException('Invalid commit hash (likely due to student accepting assignment after given date/time).')
-        # run process on system that executes 'git reset' command. stdout is redirected so it doesn't output to end user
-        # git reset is similar to checkout but doesn't care about detached heads and is more forceful
-        checkout_process = subprocess.Popen(['git', 'reset', '--hard', commit_hash], cwd=self.__repo_path, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         try:
-            self.log_errors_given_subprocess(checkout_process)
-        except GithubException:
-            logging.warning(f'Rollback failed for `{self.__repo.name}` (likely due to invalid filename at specified commit).')
-            raise RollbackException(f'Rollback failed for `{self.__repo.name}` (likely due to invalid filename at specified commit).')
+            # run process on system that executes 'git reset' command. stdout is redirected so it doesn't output to end user
+            # git reset is similar to checkout but doesn't care about detached heads and is more forceful
+            cmd = f'git reset --hard {commit_hash}'
+            await run(cmd, self.__path)
+            return True
+        except Exception as e:
+            print(f'{LIGHT_RED}[{self}] Rollback Failed: Likely invalid filename at commit `{commit_hash}`.{WHITE}')
+            await log_info('Rollback Failed', f'Likely invalid filename at commit `{commit_hash}`.', self, e)
+            return False
 
 
-    def get_repo_stats(self):
-        '''
-        Get commit history stats and find average number of insertions per commit
-        '''
-        try:
-            # run process on system that executes 'git log' command. stdout is redirected so it doesn't output to end user
-            # output is something like this format:
-            # <short commit hash> <commit message>
-            #  <x> file(s) changed, <x> insertions(+)
-            log_process = subprocess.Popen(['git', 'log', '--oneline', '--shortstat'], cwd=self.__repo_path, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-            # Loop through response line by line
-            repo_stats = [] # list to store each commits insertion number
-            total_insertions = 0
-            with log_process:
-                for line in iter(log_process.stdout.readline, b''): # b'\n'-separated lines
-                    line = line.decode()
-                    self.log_errors_given_line(line)
-                    if (re.match(r"^\s\d+\sfile.*changed,\s\d+\sinsertion.*[(+)].*", line)): # if line has insertion number in it
-                        # Replaces all non digits in a string with nothing and appends the commit's stats to repo_stats list
-                        # [0] = files changed
-                        # [1] = insertions
-                        # [2] = deletions (if any, might not be an index)
-                        stat_entry = [re.sub(r'\D', '', value) for value in line.strip().split(', ')]
-                        repo_stats.append(stat_entry)
-                        total_insertions += int(stat_entry[1])
-
-            total_commits = len(repo_stats) # each index in repo_stats should be a commit
-
-            # Calc avg and place in global dictionary using maped repo name if student roster is provided or normal repo name
-            average_insertions = round(total_insertions / total_commits, 2)
-            AVG_INSERTIONS_DICT[self.__new_repo_name] = average_insertions
-        except Exception:
-            logging.warning(f'Failed to find average insertions for {self.__repo.name}')
-            raise CommitLogException(f'Failed to find average insertions for {self.__repo.name}')
+    async def get_stats(self) -> list:
+        raise NotImplementedError('This method has not been implemented.')
 
 
-    def log_errors_given_line(self, line: str):
-        '''
-        Given 1 line of git command output, check if error.
-        If so, log it and raise exception
-        '''
-        if re.match(r'^error:|^warning:|^fatal:', line): # if git command threw error (usually wrong branch name)
-            logging.warning('Subprocess: %r', line) # Log error to log file
-            raise GithubException('An error has occured with git.') # Raise exception to the thread
-
-
-    def log_errors_given_subprocess(self, subprocess: subprocess.Popen):
-        '''
-        Reads full git command output of a subprocess and raises exception & logs if error is found
-        '''
-        with subprocess:
-            for line in iter(subprocess.stdout.readline, b''): # b'\n'-separated lines
-                line = line.decode() # line is read in bytes. Decode to str
-                self.log_errors_given_line(line)
+    async def delete(self) -> None:
+        shutil.rmtree(self.__path, onerror=onerror)
 
 
 def is_windows() -> bool:
@@ -427,11 +310,20 @@ def get_repos(assignment_name: str, org_repos: PaginatedList) -> Iterable:
             yield repo
 
 
+def is_valid_repo(repo: Repository, students: dict, assignment_name: str):
+    is_student_repo = repo.name.replace(f'{assignment_name}-', '') in students
+    if is_student_repo and len(list(repo.get_commits())) - 1 <= 0:
+        print(f'{LIGHT_RED}[{repo.name}] No commits.{WHITE}')
+        logging.warning(f'Skipping `{repo.name}` because is has 0 commits.')
+        return False
+    return is_student_repo
+
+
 def get_repos_specified_students(assignment_repos: Iterable, students: dict, assignment_name: str) -> set:
     '''
     return list of all repos in an organization matching assignment name prefix and is a student specified in the specified class roster csv
     '''
-    return set(filter(lambda repo: repo.name.replace(f'{assignment_name}-', '') in students, assignment_repos))
+    return set(filter(lambda repo: is_valid_repo(repo, students, assignment_name), assignment_repos))
 
 
 def get_students(student_filename: str) -> dict:
@@ -544,7 +436,7 @@ def print_release_changes_since_update(releases) -> None:
         release_version = Version(release.tag_name)
         if release_version > SCRIPT_VERSION:
             print(f'{LIGHT_GREEN}Version: {release_version}\nDescription:\n{release.body}\n{WHITE}')
-    
+
 
 def check_and_print_updates(token: str):
     client = Github(token.strip())
@@ -553,7 +445,7 @@ def check_and_print_updates(token: str):
     latest = releases[0]
     if is_update_available(latest):
         print_release_changes_since_update(releases)
-    
+
 
 def check_git_version():
     '''
@@ -617,21 +509,6 @@ def check_pygithub_version():
             raise PyGithubNotFound('PyGithub not found. Please install the latest version using pip. Make sure it is for the version of python you are trying to run the script from.')
 
 
-def write_avg_insersions_file(initial_path: Path, assignment_name: str):
-    '''
-    Loop through average insertions dict created by CloneRepoThreads and write to file in assignment dir
-    '''
-    num_of_lines = 0
-    local_dict = AVG_INSERTIONS_DICT
-    local_dict = dict(sorted(local_dict.items(), key=lambda item: item[0]))
-    with open(initial_path / AVERAGE_LINES_FILENAME, 'w') as avgLinesFile:
-        avgLinesFile.write(f'{assignment_name}\n\n')
-        for repo_name in local_dict:
-            avgLinesFile.write(f'{repo_name.replace(f"{assignment_name}-", "").replace("-", ", ")}\n    Average Insertions: {local_dict[repo_name]}\n\n')
-            num_of_lines += 1
-    return num_of_lines
-
-
 def check_date(date_inp: str):
     '''
     Ensure proper date format
@@ -674,7 +551,7 @@ def get_time():
     if not time_due: # if time due is blank use current time
         current_time = datetime.now() # get current time
         time_due = current_time.strftime('%H:%M') # format current time into hour:minute 24hr format
-        print(f'Using current date: {time_due}') # output what is being used to end user
+        print(f'Using current time: {time_due}') # output what is being used to end user
     return time_due
 
 
@@ -753,46 +630,42 @@ def attempt_make_client(token: str, organization: str, student_filename: str, ou
     raise ClientException('Unable to Create Github Client.')
 
 
-def print_end_report(students: dict, repos: list, len_not_accepted, cloned_num: int, rollback_num: int, lines_written: int):
-    '''
-    Give end-user somewhat detailed report of what repos were able to be cloned, how many students accepted the assignments, etc.
-    '''
-    print()
-    print(f'{LIGHT_GREEN}Done.{WHITE}')
-
-    accept_str = f'{LIGHT_GREEN}{len(students)}{WHITE}' if len_not_accepted == 0 else f'{LIGHT_RED}{len(students) - len_not_accepted}{WHITE}'
-    print(f'{LIGHT_GREEN}{accept_str}{LIGHT_GREEN}/{len(students)} accepted the assignment.{WHITE}')
-
-    clone_str = f'{LIGHT_GREEN}{cloned_num}{WHITE}' if cloned_num == len(repos) else f'{LIGHT_RED}{cloned_num}{WHITE}'
-    print(f'{LIGHT_GREEN}Cloned {clone_str}{LIGHT_GREEN}/{len(repos)} repos.{WHITE}')
-
-    rollback_str = f'{LIGHT_GREEN}{rollback_num}{WHITE}' if rollback_num == len(repos) else f'{LIGHT_RED}{rollback_num}{WHITE}'
-    print(f'{LIGHT_GREEN}Rolled Back {rollback_str}{LIGHT_GREEN}/{len(repos)} repos.{WHITE}')
-
-    lines_str = f'{LIGHT_GREEN}{lines_written}{WHITE}' if lines_written == len(repos) else f'{LIGHT_RED}{lines_written}{WHITE}'
-    print(f'{LIGHT_GREEN}Found average lines per commit for {lines_str}{LIGHT_GREEN}/{len(repos)} repos.{WHITE}')
+async def clone_repo(repo, path, filename, token, cloned_repos):
+    # If no commits, skip repo
+    destination_path = f'{path}/{filename}'
+    print(f'Cloning {repo.name} into {destination_path}...') # tell end user what repo is being cloned and where it is going to
+    # run process on system that executes 'git clone' command. stdout is redirected so it doesn't output to end user
+    clone_url = repo.clone_url.replace('https://', f'https://{token}@')
+    cmd = f'git clone --single-branch {clone_url} "{destination_path}"'
+    await run(cmd)
+    local_repo = LocalRepo(destination_path, repo.name, filename)
+    await cloned_repos.put(local_repo)
+    return True
 
 
-def log_timing_report(timings: dict, assignment_name: str):
-    logging.info('*** Start Timing report ***')
-    logging.info('    Assignment:'.ljust(34) + assignment_name)
-    for key in timings.keys():
-        prefix = f'    {key}:'.ljust(34)
-        logging.info(f'{prefix}{str(round(timings[key], 5))}')
-    logging.info('*** End Timing report ***')
+async def clone_all_repos(repos, path, students, assignment_name, token, cloned_repos):
+    tasks = []
+    for repo in repos:
+        task = asyncio.ensure_future(clone_repo(repo, path, get_new_repo_name(repo, students, assignment_name), token, cloned_repos))
+        tasks.append(task)
+    await asyncio.gather(*tasks)
 
 
-def onerror(func, path: str, exc_info) -> None:
-    import stat
-    if not os.access(path, os.W_OK):
-        os.chmod(path, stat.S_IWUSR)
-        func(path)
-    else:
-        raise
+async def rollback_all_repos(cloned_repos, date_due, time_due):
+    tasks = []
+    while not cloned_repos.empty():
+        repo = await cloned_repos.get()
+        commit_hash = await repo.get_commit_hash(date_due, time_due)
 
+        if not commit_hash:
+            print(f'{LIGHT_RED}[{repo}] Get Commit Hash Failed: Likely accepted assignment after given date/time.{WHITE}')
+            await log_info('Get Commit Hash Failed', 'Likely accepted assignment after given date/time.', repo)
+            await repo.delete()
+            continue
 
-def delete_repo_on_error(path: str, onerror=onerror) -> None:
-    shutil.rmtree(path, onerror=onerror)
+        task = asyncio.ensure_future(repo.rollback(commit_hash))
+        tasks.append(task)
+    await asyncio.gather(*tasks)
 
 
 def extract_data_folder(initial_path, data_folder_name='data'):
@@ -803,23 +676,28 @@ def extract_data_folder(initial_path, data_folder_name='data'):
         shutil.move(f'{str(Path(initial_path) / repo_to_check)}/{data_folder_name}', initial_path)
 
 
-rollback_counter = AtomicCounter()
-cloned_counter = AtomicCounter()
+def print_end_report(students: dict, repos: list, len_not_accepted, cloned_num: int):
+    '''
+    Give end-user somewhat detailed report of what repos were able to be cloned, how many students accepted the assignments, etc.
+    '''
+    print()
+    print(f'{LIGHT_GREEN}Done.{WHITE}')
+
+    accept_str = f'{LIGHT_GREEN}{len(students)}{WHITE}' if len_not_accepted == 0 else f'{LIGHT_RED}{len(students) - len_not_accepted}{WHITE}'
+    print(f'{LIGHT_GREEN}{accept_str}{LIGHT_GREEN}/{len(students)} accepted the assignment.{WHITE}')
+
+    clone_str = f'{LIGHT_GREEN}{cloned_num}{WHITE}' if cloned_num == len(repos) else f'{LIGHT_RED}{cloned_num}{WHITE}'
+    print(f'{LIGHT_GREEN}Cloned and Rolled Back {clone_str}{LIGHT_GREEN}/{len(repos)} repos.{WHITE}')
 
 
 def main():
-    '''
-    Main function
-    '''
-
-    # Enable color in cmd
-    if is_windows():
-        os.system('color')
-    # Create log file
-    logging.basicConfig(level=logging.INFO, filename=LOG_FILE_PATH)
-
-    # Try catch catches errors and sends them to the log file instead of outputting to console
     try:
+        # Enable color in cmd
+        if is_windows():
+            os.system('color')
+        # Create log file
+        logging.basicConfig(level=logging.INFO, filename=LOG_FILE_PATH)
+
         # Check local git version is compatible with script
         check_git_version()
         # Check local PyGithub module version is compatible with script
@@ -853,6 +731,8 @@ def main():
         initial_path = build_init_path(output_dir, assignment_name, date_due, time_due)
         os.mkdir(initial_path)
 
+        print()
+
         # Print and log students that have not accepted assignment
         not_accepted = set()
         not_accepted = find_students_not_accepted(students, repos, assignment_name)
@@ -863,25 +743,20 @@ def main():
         if len(not_accepted) != 0:
             print()
 
-        threads = []
-        # goes through list of repos and clones them into the assignment's parent folder
-        for repo in repos:
-            # Create thread to handle repos and add to thread list
-            # Each thread clones a repo, sets it back to due date/time, and gets avg lines per commit
-            thread = RepoHandler(repo, assignment_name, date_due, time_due, students, initial_path, token)
-            threads += [thread]
+        cloned_repos = asyncio.Queue()
 
-        # Run all clone threads
-        for thread in threads:
-            thread.start()
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(clone_all_repos(repos, initial_path, students, assignment_name, token, cloned_repos))
 
-        # Make main thread wait for all repos to be cloned, set back to due date/time, and avg lines per commit to be found
-        for thread in threads:
-            thread.join()
+        print()
 
-        num_of_lines = write_avg_insersions_file(initial_path, assignment_name)
-        print_end_report(students, repos, len(not_accepted), cloned_counter.value, rollback_counter.value, num_of_lines)
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(rollback_all_repos(cloned_repos, date_due, time_due))
+
         extract_data_folder(initial_path)
+        print_end_report(students, repos, len(not_accepted), len(os.listdir(initial_path)))
     except Exception as e:
         logging.warning(f'{type(e)}: {e}')
         print()

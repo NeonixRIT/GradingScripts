@@ -29,11 +29,11 @@ def test_setup():
 
 
 def run_clone_repos_tests():
-    pytest.main(['-vv', 'clone_repos_test.py'])
+    pytest.main(['--asyncio-mode=strict', '-vv', 'clone_repos_test.py'])
 
 
 def run_clone_script_tests():
-    pytest.main(['-vv', 'clone_script_test.py'])
+    pytest.main(['--asyncio-mode=strict', '-vv', 'clone_script_test.py'])
 
 
 def cleanup():

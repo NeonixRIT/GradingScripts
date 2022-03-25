@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 import sys
@@ -89,6 +90,8 @@ def main(args, token=None, org=None, student_filename=None):
 
         os.mkdir(initial_path)
 
+        print()
+
         # Print and log students that have not accepted assignment
         not_accepted = rh.find_students_not_accepted(students, repos, assignment_name)
         for student in not_accepted:
@@ -96,24 +99,20 @@ def main(args, token=None, org=None, student_filename=None):
             logging.info(f'{students[student]}` ({student}) did not accept the assignment `{assignment_name}` by the due date/time.')
         print()
 
-        threads = []
-        # goes through list of repos and clones them into the assignment's parent folder
-        for repo in repos:
-            # Create thread to handle repos and add to thread list
-            # Each thread clones a repo, sets it back to due date/time, and gets avg lines per commit
-            thread = rh.RepoHandler(repo, assignment_name, date_due, time_due, students, initial_path, token)
-            threads += [thread]
+        cloned_repos = asyncio.Queue()
 
-        # Run all clone threads
-        for thread in threads:
-            thread.start()
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(rh.clone_all_repos(repos, initial_path, students, assignment_name, token, cloned_repos))
 
-        # Make main thread wait for all repos to be cloned, set back to due date/time, and avg lines per commit to be found
-        for thread in threads:
-            thread.join()
+        print()
 
-        num_of_lines = rh.write_avg_insersions_file(initial_path, assignment_name)
-        rh.print_end_report(students, repos, len(not_accepted), rh.cloned_counter.value, rh.rollback_counter.value, num_of_lines)
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(rh.rollback_all_repos(cloned_repos, date_due, time_due))
+
+        rh.extract_data_folder(initial_path)
+        rh.print_end_report(students, repos, len(not_accepted), len(os.listdir(initial_path)))
     except Exception as e:
         logging.error(e)
         print()

@@ -1,3 +1,4 @@
+import asyncio
 import io
 import logging
 import os
@@ -28,18 +29,35 @@ class Result(Enum):
     FAIL = False
 
 
-def find_repo_by_name(repos, repo_name):
+def find_repo_by_name(repos: set, repo_name: str):
     return [repo for repo in repos if repo_name == repo.name][0]
 
 
-def repo_handler_setup(repo_name):
-    github_client = git.Github(TOKEN.strip(), pool_size = rh.MAX_THREADS).get_organization(ORGANIZATION_NAME)
+def get_remote_repo(repo_name: str):
+    github_client = git.Github(TOKEN.strip(), pool_size=rh.MAX_THREADS).get_organization(ORGANIZATION_NAME)
     org_repos = github_client.get_repos()
     repo_gen = rh.get_repos(ASSIGNMENT_NAME, org_repos)
     students = rh.get_students(ROSTER_FILENAME)
     repos = rh.get_repos_specified_students(repo_gen, students, ASSIGNMENT_NAME)
     initial_path = Path(f'./{TEMP_OUT_DIR}/')
-    return rh.RepoHandler(find_repo_by_name(repos, repo_name), ASSIGNMENT_NAME, DATE, TIME, students, initial_path, TOKEN)
+    return find_repo_by_name(repos, repo_name), students, initial_path
+
+
+async def handle_repo(repo_name: str):
+    cloned_repos = asyncio.Queue()
+    repo, students, initial_path = get_remote_repo(repo_name)
+    cloned_success = await rh.clone_repo(repo, initial_path, rh.get_new_repo_name(repo, students, ASSIGNMENT_NAME), TOKEN, cloned_repos)
+
+    if not cloned_success:
+        return False
+
+    local_repo = await cloned_repos.get()
+    commit_hash = await local_repo.get_commit_hash(DATE, TIME)
+
+    if not commit_hash:
+        return False
+
+    return await local_repo.rollback(commit_hash)
 
 
 '''clone_repos Tests'''
@@ -62,8 +80,8 @@ def test_build_init_path():
     expected = Path('./test_01_14_18_45')
     actual = rh.build_init_path(output_dir, ASSIGNMENT_NAME, DATE, TIME)
     assert actual == expected
-    
-    
+
+
 def test_build_init_path_exists():
     output_dir = Path('.')
     expected = Path(f'./{TEMP_OUT_DIR}_iter_1')
@@ -72,17 +90,17 @@ def test_build_init_path_exists():
 
 
 def test_get_repos():
-    github_client = git.Github(TOKEN.strip(), pool_size = rh.MAX_THREADS).get_organization(ORGANIZATION_NAME)
+    github_client = git.Github(TOKEN.strip(), pool_size=rh.MAX_THREADS).get_organization(ORGANIZATION_NAME)
     org_repos = github_client.get_repos()
     repo_gen = rh.get_repos(ASSIGNMENT_NAME, org_repos)
     repos = []
     for repo in repo_gen:
         repos.append(repo.name)
-        
+
     expected = sorted(['test-late-accept', 'test-main-branch', 'test-base', 'test-master-branch', 'test-weird-commit', 'test-NoDash', 'test-bad-filename', 'test', 'test-bad-filename-rollback'])
     actual = sorted(repos)
     assert actual == expected
-        
+
 
 def test_get_students():
     expected = sorted({
@@ -101,7 +119,7 @@ def test_get_students():
 
 
 def test_get_repos_specified_students():
-    github_client = git.Github(TOKEN.strip(), pool_size = rh.MAX_THREADS).get_organization(ORGANIZATION_NAME)
+    github_client = git.Github(TOKEN.strip(), pool_size=rh.MAX_THREADS).get_organization(ORGANIZATION_NAME)
     org_repos = github_client.get_repos()
     repo_gen = rh.get_repos(ASSIGNMENT_NAME, org_repos)
     students = rh.get_students(ROSTER_FILENAME)
@@ -111,7 +129,7 @@ def test_get_repos_specified_students():
 
 
 def test_get_new_repo_name():
-    github_client = git.Github(TOKEN.strip(), pool_size = rh.MAX_THREADS).get_organization(ORGANIZATION_NAME)
+    github_client = git.Github(TOKEN.strip(), pool_size=rh.MAX_THREADS).get_organization(ORGANIZATION_NAME)
     org_repos = github_client.get_repos()
     repo_gen = rh.get_repos(ASSIGNMENT_NAME, org_repos)
     students = rh.get_students(ROSTER_FILENAME)
@@ -198,8 +216,8 @@ def test_check_date_bad():
         assert Result.PASS
     except Exception:
         assert Result.FAIL
-    
-    
+
+
 def test_check_time_good():
     try:
         rh.check_time(TIME)
@@ -219,7 +237,7 @@ def test_check_time_bad():
 
 
 def test_check_assignment_good():
-    github_client = git.Github(TOKEN.strip(), pool_size = rh.MAX_THREADS).get_organization(ORGANIZATION_NAME)
+    github_client = git.Github(TOKEN.strip(), pool_size=rh.MAX_THREADS).get_organization(ORGANIZATION_NAME)
     org_repos = github_client.get_repos()
     repo_gen = rh.get_repos(ASSIGNMENT_NAME, org_repos)
     try:
@@ -230,7 +248,7 @@ def test_check_assignment_good():
 
 
 def test_check_assignment_bad():
-    github_client = git.Github(TOKEN.strip(), pool_size = rh.MAX_THREADS).get_organization(ORGANIZATION_NAME)
+    github_client = git.Github(TOKEN.strip(), pool_size=rh.MAX_THREADS).get_organization(ORGANIZATION_NAME)
     org_repos = github_client.get_repos()
     repo_gen = rh.get_repos('Not Real Assignment', org_repos)
     try:
@@ -258,7 +276,7 @@ def test_get_time(monkeypatch):
 
 
 def test_get_time_empty(monkeypatch):
-    monkeypatch.setattr('sys.stdin', io.StringIO(f'\n'))
+    monkeypatch.setattr('sys.stdin', io.StringIO('\n'))
     expected = datetime.now().strftime('%H:%M') # get current time
     actual = rh.get_time()
     assert actual == expected
@@ -271,15 +289,15 @@ def test_get_date(monkeypatch):
     assert actual == expected
 
 
-def test_get_date(monkeypatch):
-    monkeypatch.setattr('sys.stdin', io.StringIO(f'\n'))
+def test_get_date_empty(monkeypatch):
+    monkeypatch.setattr('sys.stdin', io.StringIO('\n'))
     expected = date.today().strftime('%Y-%m-%d')
     actual = rh.get_date()
     assert actual == expected
 
 
 def test_find_students_not_accepted():
-    github_client = git.Github(TOKEN.strip(), pool_size = rh.MAX_THREADS).get_organization(ORGANIZATION_NAME)
+    github_client = git.Github(TOKEN.strip(), pool_size=rh.MAX_THREADS).get_organization(ORGANIZATION_NAME)
     org_repos = github_client.get_repos()
     repo_gen = rh.get_repos(ASSIGNMENT_NAME, org_repos)
     students = rh.get_students(ROSTER_FILENAME)
@@ -319,7 +337,7 @@ def test_attempt_make_client_inv_org(monkeypatch):
 
 def test_attempt_make_client_inv_no(monkeypatch):
     with pytest.raises(SystemExit) as pytest_wrapped_e:
-        monkeypatch.setattr('sys.stdin', io.StringIO(f'n'))
+        monkeypatch.setattr('sys.stdin', io.StringIO('n'))
         rh.attempt_make_client(TOKEN, 'INVALID_ORG', ROSTER_FILENAME, output_dir='.')
         assert pytest_wrapped_e.type == SystemExit
         assert pytest_wrapped_e.value.code == 42
@@ -327,18 +345,16 @@ def test_attempt_make_client_inv_no(monkeypatch):
 
 
 def test_print_end_report(capsys):
-    github_client = git.Github(TOKEN.strip(), pool_size = rh.MAX_THREADS).get_organization(ORGANIZATION_NAME)
+    github_client = git.Github(TOKEN.strip(), pool_size=rh.MAX_THREADS).get_organization(ORGANIZATION_NAME)
     org_repos = github_client.get_repos()
     repo_gen = rh.get_repos(ASSIGNMENT_NAME, org_repos)
     students = rh.get_students(ROSTER_FILENAME)
     repos = rh.get_repos_specified_students(repo_gen, students, ASSIGNMENT_NAME)
     not_accepted = rh.find_students_not_accepted(students, repos, ASSIGNMENT_NAME)
     cloned_num = 5
-    rolled_back_num = 5
-    lines_written = 5
-    rh.print_end_report(students, repos, len(not_accepted), cloned_num, rolled_back_num, lines_written)
-    expected = '\n\x1b[1;32mDone.\x1b[0m\n\x1b[1;32m\x1b[1;31m8\x1b[0m\x1b[1;32m/9 accepted the assignment.\x1b[0m\n\x1b[1;32mCloned \x1b[1;31m5\x1b[0m\x1b[1;32m/8 repos.\x1b[0m\n\x1b[1;32mRolled Back \x1b[1;31m5\x1b[0m\x1b[1;32m/8 repos.\x1b[0m\n\x1b[1;32mFound average lines per commit for \x1b[1;31m5\x1b[0m\x1b[1;32m/8 repos.\x1b[0m\n'
-    actual = capsys.readouterr().out
+    rh.print_end_report(students, repos, len(not_accepted), cloned_num)
+    expected = ['', '', '\x1b[1;32m\x1b[1;31m8\x1b[0m\x1b[1;32m/9 accepted the assignment.\x1b[0m', '\x1b[1;32mCloned and Rolled Back \x1b[1;31m5\x1b[0m\x1b[1;32m/8 repos.\x1b[0m', '\x1b[1;32mDone.\x1b[0m']
+    actual = sorted(capsys.readouterr().out.split('\n'))
     assert actual == expected
 
 
@@ -350,71 +366,63 @@ def check_update_available_true():
 
 
 def check_update_available_false():
-    rh.SCRIPT_VERSION = f'9999.9999.9999'
+    rh.SCRIPT_VERSION = '9999.9999.9999'
     expected = False
     actual = rh.check_update_available(TOKEN)
     assert actual == expected
 
 
-''' RepoHandler() Tests'''
-def test_repo_base():
+''' LocalRepo Tests'''
+@pytest.mark.asyncio
+async def test_repo_base():
     try:
-        repo_handler_setup('test-base').run_raise()
-        assert Result.PASS
-    except Exception:
-        assert Result.FAIL
-
-def test_master_branch():
-    try:
-        repo_handler_setup('test-master-branch').run_raise()
-        assert Result.PASS
+        assert await handle_repo('test-base')
     except Exception:
         assert Result.FAIL
 
 
-def test_main_branch():
+@pytest.mark.asyncio
+async def test_master_branch():
     try:
-        repo_handler_setup('test-main-branch').run_raise()
-        assert Result.PASS
+        assert await handle_repo('test-master-branch')
+    except Exception:
+        assert Result.FAIL
+
+@pytest.mark.asyncio
+async def test_main_branch():
+    try:
+        assert await handle_repo('test-main-branch')
     except Exception:
         assert Result.FAIL
 
 
-def test_repo_no_dash():
+@pytest.mark.asyncio
+async def test_repo_no_dash():
     try:
-        repo_handler_setup('test-NoDash').run_raise()
-        assert Result.PASS
+        assert await handle_repo('test-NoDash')
     except Exception:
         assert Result.FAIL
 
 
-def test_repo_bad_filename():
+@pytest.mark.asyncio
+async def test_repo_bad_filename():
     try:
-        repo_handler_setup('test-bad-filename').run_raise()
-    except rh.CloneException:
-        assert Result.PASS
+        assert not await handle_repo('test-bad-filename')
     except Exception:
         assert Result.FAIL
 
 
-def test_repo_bad_filename_rollback():
+@pytest.mark.asyncio
+async def test_repo_bad_filename_rollback():
     try:
-        repo_handler_setup('test-bad-filename-rollback').run_raise()
+        assert not await handle_repo('test-bad-filename-rollback')
+    except Exception:
         assert Result.FAIL
-    except rh.RollbackException:
-        assert Result.PASS
 
 
-def test_weird_commit_msg():
-    repo_handler_setup('test-weird-commit').run_raise()
-    expected = 1.33
-    actual = rh.AVG_INSERTIONS_DICT['test-weird-commit']
-    assert actual == expected
-
-
-def test_repo_late():
+@pytest.mark.asyncio
+async def test_repo_late():
     try:
-        repo_handler_setup('test-late-accept').run_raise()
+        assert not await handle_repo('test-late-accept')
+    except Exception:
         assert Result.FAIL
-    except rh.RollbackException:
-        assert Result.PASS
