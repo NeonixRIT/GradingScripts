@@ -353,7 +353,7 @@ def test_print_end_report(capsys):
     not_accepted = rh.find_students_not_accepted(students, repos, ASSIGNMENT_NAME)
     cloned_num = 5
     rh.print_end_report(students, repos, len(not_accepted), cloned_num)
-    expected = ['', '', '\x1b[1;32m\x1b[1;31m8\x1b[0m\x1b[1;32m/9 accepted the assignment.\x1b[0m', '\x1b[1;32mCloned and Rolled Back \x1b[1;31m5\x1b[0m\x1b[1;32m/8 repos.\x1b[0m', '\x1b[1;32mDone.\x1b[0m']
+    expected = ['', '', '\x1b[1;31m\x1b[1;32m0\x1b[0m\x1b[1;32m/9 had no commits.', '\x1b[1;32m\x1b[1;31m8\x1b[0m\x1b[1;32m/9 accepted the assignment.\x1b[0m', '\x1b[1;32mCloned and Rolled Back \x1b[1;31m5\x1b[0m\x1b[1;32m/8 repos.\x1b[0m', '\x1b[1;32mDone.\x1b[0m']
     actual = sorted(capsys.readouterr().out.split('\n'))
     assert actual == expected
 

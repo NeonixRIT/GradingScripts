@@ -40,7 +40,10 @@ def cleanup():
     import shutil
     try:
         os.remove(rh.LOG_FILE_PATH)
-        shutil.rmtree(f'./{TEMP_OUT_DIR}', onerror=onerror)
+        if pathlib.Path(f'./{TEMP_OUT_DIR}').exists():
+            shutil.rmtree(f'./{TEMP_OUT_DIR}', onerror=onerror)
+        if pathlib.Path(f'../{TEMP_OUT_DIR}').exists():
+            shutil.rmtree(f'../{TEMP_OUT_DIR}', onerror=onerror)
     except FileNotFoundError:
         print('Something went wrong :).')
 

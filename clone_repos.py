@@ -25,6 +25,7 @@ LOG_FILE_PATH = 'tmp/logs.log' # where the log file goes
 LIGHT_GREEN = '\033[1;32m' # Ansi code for light_green
 LIGHT_RED = '\033[1;31m' # Ansi code for light_red
 WHITE = '\033[0m' # Ansi code for white to reset back to normal text
+NO_COMMITS = set() # Keep track of repos w/ 0 commits to exclude when finding students who didnt accept assignment
 
 
 '''
@@ -315,6 +316,7 @@ def is_valid_repo(repo: Repository, students: dict, assignment_name: str):
     if is_student_repo and len(list(repo.get_commits())) - 1 <= 0:
         print(f'{LIGHT_RED}[{repo.name}] No commits.{WHITE}')
         logging.warning(f'Skipping `{repo.name}` because is has 0 commits.')
+        NO_COMMITS.add(repo.name.replace(f'{assignment_name}-', ''))
         return False
     return is_student_repo
 
@@ -573,7 +575,7 @@ def find_students_not_accepted(students: dict, repos: list, assignment_name: str
     '''
     students_keys = set(students.keys())
     accepted = {repo.name.replace(f'{assignment_name}-', '') for repo in repos}
-    return students_keys ^ accepted
+    return (students_keys ^ accepted) - NO_COMMITS
 
 
 def update_organization(token: str, student_filename: str, output_dir: Path) -> tuple:
@@ -674,9 +676,10 @@ def extract_data_folder(initial_path, data_folder_name='data'):
     folders = os.listdir(Path(initial_path) / repo_to_check)
     if data_folder_name in folders:
         shutil.move(f'{str(Path(initial_path) / repo_to_check)}/{data_folder_name}', initial_path)
+        print(f'{LIGHT_GREEN}Data folder extracted to the output directory.{WHITE}')
 
 
-def print_end_report(students: dict, repos: list, len_not_accepted, cloned_num: int):
+def print_end_report(students: dict, repos: list, len_not_accepted: int, cloned_num: int) -> None:
     '''
     Give end-user somewhat detailed report of what repos were able to be cloned, how many students accepted the assignments, etc.
     '''
@@ -685,6 +688,9 @@ def print_end_report(students: dict, repos: list, len_not_accepted, cloned_num: 
 
     accept_str = f'{LIGHT_GREEN}{len(students)}{WHITE}' if len_not_accepted == 0 else f'{LIGHT_RED}{len(students) - len_not_accepted}{WHITE}'
     print(f'{LIGHT_GREEN}{accept_str}{LIGHT_GREEN}/{len(students)} accepted the assignment.{WHITE}')
+
+    commits_str = f'{LIGHT_GREEN}{len(NO_COMMITS & set(students.keys()))}{WHITE}' if len(NO_COMMITS) == 0 else f'{LIGHT_RED}{len(NO_COMMITS & set(students.keys()))}{WHITE}'
+    print(f'{LIGHT_RED}{commits_str}{LIGHT_GREEN}/{len(students)} had no commits.')
 
     clone_str = f'{LIGHT_GREEN}{cloned_num}{WHITE}' if cloned_num == len(repos) else f'{LIGHT_RED}{cloned_num}{WHITE}'
     print(f'{LIGHT_GREEN}Cloned and Rolled Back {clone_str}{LIGHT_GREEN}/{len(repos)} repos.{WHITE}')
@@ -716,6 +722,7 @@ def main():
         assignment_name = attempt_get_assignment()
         date_due = get_date()
         time_due = get_time()
+
         print() # new line for formatting reasons
 
         students = dict() # student dict variable do be used im main scope
@@ -755,8 +762,8 @@ def main():
         asyncio.set_event_loop(loop)
         loop.run_until_complete(rollback_all_repos(cloned_repos, date_due, time_due))
 
-        extract_data_folder(initial_path)
         print_end_report(students, repos, len(not_accepted), len(os.listdir(initial_path)))
+        extract_data_folder(initial_path)
     except Exception as e:
         logging.warning(f'{type(e)}: {e}')
         print()
