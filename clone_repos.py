@@ -186,7 +186,7 @@ class Version:
         return repr(self) == repr(other)
 
 
-SCRIPT_VERSION = Version('1.1.0')
+SCRIPT_VERSION = Version('1.1.1')
 
 
 async def run(cmd: str, cwd=os.getcwd()) -> None:
