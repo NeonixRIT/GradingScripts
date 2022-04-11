@@ -111,8 +111,8 @@ def main(args, token=None, org=None, student_filename=None):
         asyncio.set_event_loop(loop)
         loop.run_until_complete(rh.rollback_all_repos(cloned_repos, date_due, time_due))
 
-        rh.extract_data_folder(initial_path)
         rh.print_end_report(students, repos, len(not_accepted), len(os.listdir(initial_path)))
+        rh.extract_data_folder(initial_path)
     except Exception as e:
         logging.error(e)
         print()
