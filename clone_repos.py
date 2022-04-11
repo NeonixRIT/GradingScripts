@@ -267,6 +267,7 @@ class LocalRepo:
     async def reset_to_remote(self):
         await run('git fetch --all')
         await run(f'git reset --hard origin/{self.__remote_repo.default_branch}')
+        await run(f'git pull')
         
         
     async def attempt_git_workflow(self, commit_message: str):
