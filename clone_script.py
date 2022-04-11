@@ -3,7 +3,8 @@ import logging
 import os
 import sys
 import clone_repos as rh
-import pathlib as path
+
+from pathlib import Path
 
 
 def print_help():
@@ -31,16 +32,16 @@ def parse_args(args: list):
     return assignment_name, date_due, time_due, out_folder
 
 
-def build_init_path_given_out(output_dir: path.Path, out_folder: str):
+def build_init_path_given_out(output_dir: Path, out_folder: str):
     init_path = output_dir / out_folder
     index = 1
-    if path.Path(init_path).exists():
-        new_path = path.Path(f'{init_path}_iter_{index}')
-        while path.Path(new_path).exists():
+    if Path(init_path).exists():
+        new_path = Path(f'{init_path}_iter_{index}')
+        while Path(new_path).exists():
             index += 1
-            new_path = path.Path(f'{init_path}_iter_{index}')
-        return path.Path(new_path)
-    return path.Path(init_path)
+            new_path = Path(f'{init_path}_iter_{index}')
+        return Path(new_path)
+    return Path(init_path)
 
 
 def main(args, token=None, org=None, student_filename=None):
@@ -51,6 +52,8 @@ def main(args, token=None, org=None, student_filename=None):
     if rh.is_windows():
         os.system('color')
     # Create log file
+    if not Path(rh.LOG_FILE_PATH).exists():
+        open(rh.LOG_FILE_PATH, 'w').close()
     logging.basicConfig(level=logging.INFO, filename=rh.LOG_FILE_PATH)
 
     # Try catch catches errors and sends them to the log file instead of outputting to console

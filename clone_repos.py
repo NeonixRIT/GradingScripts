@@ -767,6 +767,8 @@ def main():
         if is_windows():
             os.system('color')
         # Create log file
+        if not Path(LOG_FILE_PATH).exists():
+            open(LOG_FILE_PATH, 'w').close()
         logging.basicConfig(level=logging.INFO, filename=LOG_FILE_PATH)
 
         # Check local git version is compatible with script
