@@ -215,6 +215,25 @@ async def log_info(msg: str, hint: str, repo, exception: Exception = None) -> No
     )
 
 
+async def zip_folder(base_path, sub_dir):
+    source_path = f'{base_path}{sub_dir}'
+    shutil.make_archive(source_path, 'zip', source_path)
+    return f'{source_path}.zip', f'{sub_dir}.zip', True
+
+
+async def get_files_to_add(input_dir: os.PathLike) -> list[tuple[str, str, bool]]:
+    path, folders, files = list(os.walk(input_dir))[0]
+    files_to_add = [(f'{path}{file}', file, False) for file in files if file != '.gitkeep']
+    folders_to_add = [await zip_folder(path, folder) for folder in folders if not Path(f'{path}{folder}.zip').exists()]
+    return files_to_add + folders_to_add
+
+
+def cleanup_files_to_add(files_to_add: list[tuple[str, str, bool]]):
+    for path, _, remove in files_to_add:
+        if remove:
+            os.remove(path)
+
+
 def onerror(func, path: str, exc_info) -> None:
     import stat
     if not os.access(path, os.W_OK):
@@ -228,12 +247,13 @@ class LocalRepo:
     '''
     Object representing a cloned repo
     '''
-    __slots__ = ['__path', '__old_name', '__new_name']
+    __slots__ = ['__path', '__old_name', '__new_name', '__remote_repo']
 
-    def __init__(self, path: str, old_name: str, new_name: str):
+    def __init__(self, path: str, old_name: str, new_name: str, remote_repo: Repository):
         self.__path = path
         self.__old_name = old_name
         self.__new_name = new_name
+        self.__remote_repo = remote_repo
 
 
     def __str__(self) -> str:
@@ -242,6 +262,17 @@ class LocalRepo:
 
     def __repr__(self) -> str:
         return f'LocalRepo[path={self.__path}, old_name={self.__old_name}, new_name={self.__new_name}]'
+
+
+    async def reset_to_remote(self):
+        await run('git fetch --all')
+        await run(f'git reset --hard origin/{self.__remote_repo.default_branch}')
+        
+        
+    async def attempt_git_workflow(self, commit_message: str):
+        await run('git add *', self.__path)
+        await run(f'git commit -m "{commit_message}"', self.__path)
+        await run('git push', self.__path)
 
 
     async def get_commit_hash(self, date_due: str, time_due: str) -> str:
@@ -275,12 +306,24 @@ class LocalRepo:
             return False
 
 
-    async def get_stats(self) -> list:
-        raise NotImplementedError('This method has not been implemented.')
+    async def add(self, files_to_add: list[tuple[str, str, bool]], commit_message: str):
+        await self.reset_to_remote()
+        
+        for path, filename, _ in files_to_add:
+            if filename.endswith('.zip'):
+                shutil.unpack_archive(path, f'{self.__path}/{filename[:-4]}')
+                continue
+            shutil.copy(path, self.__path)
+
+        await self.attempt_git_workflow(commit_message)
 
 
     async def delete(self) -> None:
         shutil.rmtree(self.__path, onerror=onerror)
+
+
+    async def get_stats(self) -> list:
+        raise NotImplementedError('This method has not been implemented.')
 
 
 def is_windows() -> bool:
@@ -640,7 +683,7 @@ async def clone_repo(repo, path, filename, token, cloned_repos):
     clone_url = repo.clone_url.replace('https://', f'https://{token}@')
     cmd = f'git clone --single-branch {clone_url} "{destination_path}"'
     await run(cmd)
-    local_repo = LocalRepo(destination_path, repo.name, filename)
+    local_repo = LocalRepo(destination_path, repo.name, filename, repo)
     await cloned_repos.put(local_repo)
     return True
 
@@ -696,7 +739,29 @@ def print_end_report(students: dict, repos: list, len_not_accepted: int, cloned_
     print(f'{LIGHT_GREEN}Cloned and Rolled Back {clone_str}{LIGHT_GREEN}/{len(repos)} repos.{WHITE}')
 
 
-def main():
+async def add_to_all_repos(input_path: os.PathLike, commit_message: str, cloned_repos: asyncio.Queue[LocalRepo]):
+    tasks = []
+    files_to_add = await get_files_to_add(input_path)
+    while not cloned_repos.empty():
+        repo = await cloned_repos.get()
+        task = asyncio.ensure_future(repo.add(files_to_add, commit_message))
+        tasks.append(task)
+    await asyncio.gather(*tasks)
+    
+    
+async def clone_repos_routine():
+    pass
+
+
+async def rollback_repos_routine():
+    pass
+
+
+async def add_to_repos_routine():
+    pass
+
+    
+def main():    
     try:
         # Enable color in cmd
         if is_windows():
