@@ -267,9 +267,9 @@ class LocalRepo:
     async def reset_to_remote(self):
         await run('git fetch --all')
         await run(f'git reset --hard origin/{self.__remote_repo.default_branch}')
-        await run(f'git pull')
-        
-        
+        await run('git pull')
+
+
     async def attempt_git_workflow(self, commit_message: str):
         await run('git add *', self.__path)
         await run(f'git commit -m "{commit_message}"', self.__path)
@@ -309,7 +309,7 @@ class LocalRepo:
 
     async def add(self, files_to_add: list[tuple[str, str, bool]], commit_message: str):
         await self.reset_to_remote()
-        
+
         for path, filename, _ in files_to_add:
             if filename.endswith('.zip'):
                 shutil.unpack_archive(path, f'{self.__path}/{filename[:-4]}')
@@ -514,8 +514,10 @@ def pyversion_short(subprocess: subprocess.Popen):
             line = line.decode().lower()
             if 'version:' in line:
                 return float(line.split(': ')[1][0:4])
-            if 'not found:' in line:
+            elif 'not found:' in line:
                 raise PyGithubNotFound()
+            else:
+                return 99.99
 
 
 def try_alt_pygithub_check():
@@ -533,6 +535,8 @@ def try_alt_pygithub_check():
                 raise InvalidPyGithubVersion(f'Incompatible PyGithub version. Use version {MIN_PYGITHUB_VERSION}+. Use `pip install PyGithub --upgrade` to update')
     except FileNotFoundError:
         raise PipNotFound('pip not found.')
+    except Exception as e:
+        logging.warning(f"Error occured while handling the pip process: {e}")
 
 
 def check_pygithub_version():
@@ -553,6 +557,8 @@ def check_pygithub_version():
             try_alt_pygithub_check()
         except Exception:
             raise PyGithubNotFound('PyGithub not found. Please install the latest version using pip. Make sure it is for the version of python you are trying to run the script from.')
+    except Exception as e:
+        logging.warning(f"Error occured while handling the pip process: {e}")
 
 
 def check_date(date_inp: str):
@@ -748,8 +754,8 @@ async def add_to_all_repos(input_path: os.PathLike, commit_message: str, cloned_
         task = asyncio.ensure_future(repo.add(files_to_add, commit_message))
         tasks.append(task)
     await asyncio.gather(*tasks)
-    
-    
+
+
 async def clone_repos_routine():
     pass
 
@@ -761,8 +767,8 @@ async def rollback_repos_routine():
 async def add_to_repos_routine():
     pass
 
-    
-def main():    
+
+def main():
     try:
         # Enable color in cmd
         if is_windows():
