@@ -3,13 +3,14 @@ from .menu import Menu
 from .utils import clear
 
 class SubMenu(Menu):
-    __slots__ = ['parent']
+    __slots__ = ['parent', 'only_one_prompt']
 
-    def __init__(self, name: str, options: list):
+    def __init__(self, name: str, options: list, only_one_prompt: bool = False):
         Menu.__init__(self, name, options)
         self.prompt_string = f'Please enter a number {LIGHT_GREEN}({self.min_options}-{self.max_options}){WHITE} or {LIGHT_RED}q/quit{WHITE} to return to the previous menu: '
         self.quit_string = ''
         self.invalid_input_string = f'You entered an invalid option.\n\nPlease enter a number between {self.min_options} and {self.max_options}.\nPress enter to try again.'
+        self.only_one_prompt = only_one_prompt
 
 
     def __quit(self):
@@ -35,10 +36,10 @@ class SubMenu(Menu):
                 return (True, user_option_int, [])
 
         clear()
-        result = self.options[user_option_int - 1]()
-        if self.options[user_option_int - 1].pause:
+        result = self.options[user_option_int]()
+        if self.options[user_option_int].pause:
             input('Press enter to continue...')
-        return (True, user_option_int, result)
+        return (not self.only_one_prompt, user_option_int, result)
 
 
     def run(self):

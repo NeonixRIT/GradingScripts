@@ -3,5 +3,8 @@ tmp/config.txt
 tmp/old_rosters
 tmp/rosters
 tmp/logs.log
+data/config.json
+data/csvs/*.csvs
+data/logs.log
 *__*
 .p*

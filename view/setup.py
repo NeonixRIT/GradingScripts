@@ -3,7 +3,7 @@ import os
 import time
 
 from model.colors import LIGHT_GREEN, LIGHT_RED, CYAN, WHITE
-from model.utils import clear
+from model.utils import clear, make_new_config, save_config
 
 from types import SimpleNamespace
 from pathlib import Path
@@ -49,33 +49,6 @@ def read_old_config_raw(old_config_path: str) -> dict:
             student_filename = config.readline().strip().split(': ')[1]
             output_dir = config.readline().strip().split(': ')[1]
     return {'token': token, 'organization': organization, 'students_csv': student_filename, 'out_dir': output_dir}
-
-
-def save_config(config: SimpleNamespace):
-    config_str = json.dumps(config.__dict__, indent=4)
-
-    if not Path('./data').exists():
-        os.mkdir('./data')
-
-    with open('./data/config.json', 'w') as f:
-        f.write(config_str)
-        f.flush()
-
-
-def make_new_config() -> SimpleNamespace:
-    token = input('Github Authentication Token: ')
-    organization = input('Organization Name: ')
-    student_filename = input('Enter path of csv file containing username and name of students: ')
-    output_dir = Path(input('Output directory for assignment files (`enter` for current directory): '))
-    if not output_dir:
-        output_dir = Path.cwd()
-    while not Path.is_dir(output_dir):
-        print(f'Directory `{output_dir}` not found.')
-        output_dir = Path(input('Output directory for assignment files (`enter` for current directory): '))
-
-    values = {'token': token, 'organization': organization, 'students_csv': student_filename, 'out_dir': str(output_dir), 'presets': [], 'add_rollback': []}
-    values_formatted = json.dumps(values, indent=4)
-    return json.loads(values_formatted, object_hook=lambda d: SimpleNamespace(**d))
 
 
 def setup() -> None:

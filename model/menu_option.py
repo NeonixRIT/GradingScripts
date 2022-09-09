@@ -17,5 +17,9 @@ class MenuOption:
         return f'{color}[{self.number}]{WHITE} {self.text}'
 
 
+    def __repr__(self) -> str:
+        return f'MenuOption(number: {self.number}, text: {self.text}, on_select: {self.on_select})'
+
+
     def __call__(self) -> list:
         return self.on_select()

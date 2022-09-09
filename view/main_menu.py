@@ -5,40 +5,81 @@
 import model
 
 from .clone_menu import CloneMenu
+from .config_menu import ConfigMenu
 from .setup import setup
 
 from pathlib import Path
 
+VERSION = '2.0.0'
+PY_DEPENDENCIES = {'versionmanagerpy': '1.0.2', 'pygithub': '1.50'}
+GIT_DEPENDENCY = '2.30.0'
+
+def check_and_install_dependencies():
+    for package, version in PY_DEPENDENCIES.items():
+        installed, correct_version = model.utils.check_package(package, version)
+        if not installed or not correct_version:
+            model.utils.install_package(package, correct_version)
+
+    installed, correct_version = model.utils.check_git(GIT_DEPENDENCY)
+    if not installed or not correct_version:
+        print(f'{model.colors.LIGHT_RED}FATAL: Git not installed correctly or is not at or above version 2.30.0{model.colors.WHITE}')
+        # Raise Custom Error
+
+
 class MainMenu(model.Menu):
     def __init__(self):
         setup_complete = Path('./data/config.json').exists()
+        check_and_install_dependencies()
 
-        clone_menu = CloneMenu()
+        from versionmanagerpy import versionmanager
+        vm = versionmanager.VersionManager('NeonixRIT', 'GradingScripts', VERSION)
+        vm.on_outdated += lambda: print('outdated')
+        update_status = vm.check_status()
+        if update_status == versionmanager.Status.OUTDATED:
+            model.utils.print_updates(VERSION)
+
         clone_repos_event = model.Event()
-        clone_repos_event += clone_menu.run
         clone_repos = model.MenuOption(1, 'Clone Repos', clone_repos_event, False, setup_complete)
 
-        add_menu = CloneMenu() # AddMenu()
         add_event = model.Event()
-        add_event += add_menu.run
         add = model.MenuOption(2, 'Add Files', add_event, False, False)
 
-        manage_menu = CloneMenu() # ManageMenu()
         manage_repos_event = model.Event()
-        manage_repos_event += manage_menu.run
-        manage_repos = model.MenuOption(3, 'Repo Manager', manage_repos_event, False, setup_complete)
+        manage_repos = model.MenuOption(3, 'Repo Manager', manage_repos_event, False, False)
 
-        config_menu = CloneMenu() # ConfigMenu()
         config_event = model.Event()
-        config_event += config_menu.run
         config = model.MenuOption(4, 'Edit Config', config_event, False, setup_complete)
 
+        if setup_complete:
+            clone_menu = CloneMenu()
+            add_menu = CloneMenu() # AddMenu()
+            manage_menu = CloneMenu() # ManageMenu()
+            config_menu = ConfigMenu() # ConfigMenu()
+
+            clone_repos.on_select += clone_menu.run
+            add.on_select += add_menu.run
+            manage_repos.on_select += manage_menu.run
+            config.on_select += config_menu.run
+
         def update_options():
-            setup_complete = Path('./data/config.json').exists()
-            clone_repos.enabled = setup_complete
-            # add.enabled = setup_complete
-            manage_repos.enabled = setup_complete
-            config.enabled = setup_complete
+            old_setup_complete = setup_complete
+            new_setup_complete = Path('./data/config.json').exists()
+            clone_repos.enabled = new_setup_complete
+            # add.enabled = new_setup_complete
+            manage_repos.enabled = new_setup_complete
+            config.enabled = new_setup_complete
+
+            if old_setup_complete != new_setup_complete:
+                clone_menu = CloneMenu()
+                add_menu = CloneMenu() # AddMenu()
+                manage_menu = CloneMenu() # ManageMenu()
+                config_menu = ConfigMenu() # ConfigMenu()
+
+                clone_repos.on_select += clone_menu.run
+                add.on_select += add_menu.run
+                manage_repos.on_select += manage_menu.run
+                config.on_select += config_menu.run
+
 
         setup_config_event = model.Event()
         setup_config_event += setup
@@ -46,5 +87,4 @@ class MainMenu(model.Menu):
         setup_config = model.MenuOption(5, 'Run Setup', setup_config_event)
 
         options = [clone_repos, add, manage_repos, config, setup_config]
-        model.Menu.__init__(self, 'GCIS Grading Scripts v2.0', options)
-        # TODO check update, print version, etc
+        model.Menu.__init__(self, f'GCIS Grading Scripts {model.utils.get_color_from_status(update_status)}v{VERSION}{model.colors.WHITE}', options)
