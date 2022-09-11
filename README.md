@@ -3,7 +3,7 @@ Welcome to the GradingScripts, home of all the scripts needed to grade the class
 
 Here is a brief guide for how to use the grading scripts for GCIS-123/124. In this quick guide, I’ll be going over how to use these scripts, each of there purposes, and how to use them for the first time. If you’re not a CA for GCIS-123/124, please stop reading. Or don’t. Not like this will be a very entertaining read.
 
-![](https://user-images.githubusercontent.com/12210881/148610094-7e0d17f6-fb2f-457d-83b6-9b6ee35eb291.png)
+![image](https://user-images.githubusercontent.com/12210881/189549333-32fdfc26-5cb6-4008-9205-515f1efaa1a5.png)
 
 # Prerequisites
  - Python 3 or newer
