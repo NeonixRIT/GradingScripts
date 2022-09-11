@@ -3,5 +3,9 @@ tmp/config.txt
 tmp/old_rosters
 tmp/rosters
 tmp/logs.log
+data/config.json
+*.csv
+data/logs.log
 *__*
 .p*
+**/files_to_add/

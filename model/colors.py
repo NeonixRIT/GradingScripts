@@ -1,0 +1,4 @@
+LIGHT_GREEN = '\033[1;32m'
+LIGHT_RED = '\033[1;31m'
+CYAN = '\u001b[36m'
+WHITE = '\033[0m'
