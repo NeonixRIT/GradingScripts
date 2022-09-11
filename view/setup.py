@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 import time
 
 from model.colors import LIGHT_GREEN, LIGHT_RED, CYAN, WHITE
@@ -80,6 +81,11 @@ def setup() -> None:
     old_values = read_old_config_raw(old_config_path)
     old_values_formatted = json.dumps(old_values, indent=4)
     config = json.loads(old_values_formatted, object_hook=lambda d: SimpleNamespace(**d))
+    try:
+        shutil.copyfile(config.students_csv, f'./data/csvs/{config.students_csv.split("/")[-1]}')
+        config.students_csv = f'./data/csvs/{config.students_csv.split("/")[-1]}'
+    except Exception: # if run into error its fine this just QOL feature
+        pass
     config.presets = []
     config.add_rollback = []
     save_config(config)

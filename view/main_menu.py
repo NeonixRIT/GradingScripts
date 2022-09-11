@@ -26,7 +26,6 @@ def check_and_install_dependencies():
     installed, correct_version = model.utils.check_git(GIT_DEPENDENCY)
     if not installed or not correct_version:
         print(f'{model.colors.LIGHT_RED}FATAL: Git not installed correctly or is not at or above version 2.30.0{model.colors.WHITE}')
-        # Raise Custom Error
 
 
 class MainMenu(model.Menu):
@@ -63,39 +62,37 @@ class MainMenu(model.Menu):
             self.students = model.repo_utils.get_students(self.config.students_csv)
 
             clone_menu = CloneMenu(self.config, self.client, self.repos, self.students)
-            manage_menu = CloneMenu(self.config, self.client, self.repos, self.students) # ManageMenu()
             config_menu = ConfigMenu()
 
             clone_repos.on_select += clone_menu.run
             add.on_select += lambda: AddMenu(self.config)
-            manage_repos.on_select += manage_menu.run
             config.on_select += config_menu.run
 
 
         def update_options():
             old_setup_complete = setup_complete
             new_setup_complete = Path('./data/config.json').exists()
-            self.students = model.repo_utils.get_students(self.config.students_csv)
 
             if old_setup_complete != new_setup_complete and new_setup_complete:
                 clone_repos.enabled = new_setup_complete
                 add.enabled = new_setup_complete
-                manage_repos.enabled = new_setup_complete
                 config.enabled = new_setup_complete
 
                 self.config = model.utils.read_config(CONFIG_PATH)
                 from github import Github
                 self.client = Github(self.config.token, pool_size=MAX_THREADS).get_organization(self.config.organization)
                 self.repos = self.client.get_repos()
+                self.students = model.repo_utils.get_students(self.config.students_csv)
 
                 clone_menu = CloneMenu(self.config, self.client, self.repos, self.students)
-                manage_menu = CloneMenu(self.config, self.client, self.repos, self.students) # ManageMenu()
                 config_menu = ConfigMenu()
 
                 clone_repos.on_select += clone_menu.run
                 add.on_select += lambda: AddMenu(self.config)
-                manage_repos.on_select += manage_menu.run
                 config.on_select += config_menu.run
+
+            if new_setup_complete:
+                self.students = model.repo_utils.get_students(self.config.students_csv)
 
 
         setup_config_event = model.Event()
