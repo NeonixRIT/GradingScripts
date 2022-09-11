@@ -61,6 +61,11 @@ class CloneMenu(model.SubMenu):
 
 
     def clone_repos(self, preset: model.clone_preset.ClonePreset = None):
+        students_path = self.config.students_csv
+        if preset is not None:
+            students_path = preset.csv_path
+            self.students = model.repo_utils.get_students(students_path)
+
         assignment_name = model.repo_utils.attempt_get_assignment() # prompt assignment name
         assignment_name, self.repos = model.utils.verify_assignment_name(assignment_name, self.repos)
 
@@ -73,7 +78,7 @@ class CloneMenu(model.SubMenu):
             due_date = model.repo_utils.get_date()
 
         if preset is None:
-            preset = model.clone_preset.ClonePreset('', '', model.repo_utils.get_time(), self.config.students_csv, False)
+            preset = model.clone_preset.ClonePreset('', '', model.repo_utils.get_time(), students_path, False)
             append_timestamp_input = input(f'Append timestamp to repo folder name ({model.colors.LIGHT_GREEN}Y{model.colors.WHITE}/{model.colors.LIGHT_RED}N{model.colors.WHITE})? ').lower()
             preset.append_timestamp = False if append_timestamp_input == 'n' or append_timestamp_input == 'no' else True
 

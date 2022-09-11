@@ -75,6 +75,7 @@ class MainMenu(model.Menu):
         def update_options():
             old_setup_complete = setup_complete
             new_setup_complete = Path('./data/config.json').exists()
+            self.students = model.repo_utils.get_students(self.config.students_csv)
 
             if old_setup_complete != new_setup_complete and new_setup_complete:
                 clone_repos.enabled = new_setup_complete
@@ -86,7 +87,6 @@ class MainMenu(model.Menu):
                 from github import Github
                 self.client = Github(self.config.token, pool_size=MAX_THREADS).get_organization(self.config.organization)
                 self.repos = self.client.get_repos()
-                self.students = model.repo_utils.get_students(self.config.students_csv)
 
                 clone_menu = CloneMenu(self.config, self.client, self.repos, self.students)
                 manage_menu = CloneMenu(self.config, self.client, self.repos, self.students) # ManageMenu()
