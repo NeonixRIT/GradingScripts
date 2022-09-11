@@ -48,7 +48,7 @@ class ConfigMenu(model.SubMenu):
     def edit_config_value(self, value_name: str):
         model.utils.clear()
 
-        student_csv_menu_quit = False
+        student_csv_menu_quit = True
         if value_name == 'students_csv':
             if len(os.listdir('./data/csvs/')) == 0:
                 self.set_config_value(value_name, input('Enter the desired new value: '))

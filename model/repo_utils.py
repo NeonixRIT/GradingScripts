@@ -209,6 +209,9 @@ async def log_info(msg: str, hint: str, repo, exception: Exception = None) -> No
     '''
     Helper Function for logging errors to the log file
     '''
+    if not Path('./data/logs.log').exists():
+        open(LOG_FILE_PATH, 'w').close()
+    logging.basicConfig(level=logging.INFO, filename=LOG_FILE_PATH)
     exception_str = exception if exception is not None else ''
     logging.info(
         f'{msg}:\n' + f'  {repr(repo)}\n' + f'  {hint}\n' + f'  {exception_str}\n\n'
@@ -262,6 +265,10 @@ class LocalRepo:
 
     def __repr__(self) -> str:
         return f'LocalRepo[path={self.__path}, old_name={self.__old_name}, new_name={self.__new_name}]'
+
+
+    def old_name(self) -> str:
+        return self.__old_name
 
 
     async def reset_to_remote(self):
@@ -359,7 +366,7 @@ def is_valid_repo(repo: Repository, students: dict, assignment_name: str):
     is_student_repo = repo.name.replace(f'{assignment_name}-', '') in students
     if is_student_repo and len(list(repo.get_commits())) - 1 <= 0:
         print(f'{LIGHT_RED}[{repo.name}] No commits.{WHITE}')
-        logging.warning(f'Skipping `{repo.name}` because is has 0 commits.')
+        # logging.warning(f'Skipping `{repo.name}` because is has 0 commits.')
         NO_COMMITS.add(repo.name.replace(f'{assignment_name}-', ''))
         return False
     return is_student_repo
@@ -566,7 +573,8 @@ def check_date(date_inp: str):
     Ensure proper date format
     '''
     if not re.match(r'\d{4}-\d{2}-\d{2}', date_inp):
-        raise InvalidDate('Invalid date format.')
+        return False
+    return True
 
 
 def check_time(time_inp: str):
@@ -574,7 +582,8 @@ def check_time(time_inp: str):
     Ensure proper time format
     '''
     if not re.match(r'\d{2}:\d{2}', time_inp):
-        raise InvalidTime('Invalid time format.')
+        return False
+    return True
 
 
 def check_assignment_name(repos: str):
@@ -619,13 +628,13 @@ def get_date():
     return date_due
 
 
-def find_students_not_accepted(students: dict, repos: list, assignment_name: str) -> set:
+def find_students_not_accepted(students: dict, repos: list, assignment_name: str, no_commits) -> set:
     '''
     Find students who are on the class list but did not have their repos cloned
     '''
     students_keys = set(students.keys())
     accepted = {repo.name.replace(f'{assignment_name}-', '') for repo in repos}
-    return (students_keys ^ accepted) - NO_COMMITS
+    return (students_keys ^ accepted) - no_commits
 
 
 def update_organization(token: str, student_filename: str, output_dir: Path) -> tuple:
@@ -685,7 +694,7 @@ def attempt_make_client(token: str, organization: str, student_filename: str, ou
 async def clone_repo(repo, path, filename, token, cloned_repos):
     # If no commits, skip repo
     destination_path = f'{path}/{filename}'
-    print(f'Cloning {repo.name} into {destination_path}...') # tell end user what repo is being cloned and where it is going to
+    print(f'    > Cloning [{repo.name}] {filename}...') # tell end user what repo is being cloned and where it is going to
     # run process on system that executes 'git clone' command. stdout is redirected so it doesn't output to end user
     clone_url = repo.clone_url.replace('https://', f'https://{token}@')
     cmd = f'git clone --single-branch {clone_url} "{destination_path}"'
@@ -710,7 +719,7 @@ async def rollback_all_repos(cloned_repos, date_due, time_due):
         commit_hash = await repo.get_commit_hash(date_due, time_due)
 
         if not commit_hash:
-            print(f'{LIGHT_RED}[{repo}] Get Commit Hash Failed: Likely accepted assignment after given date/time.{WHITE}')
+            print(f'    > {LIGHT_RED}Get Commit Hash Failed: [{repo.old_name()}] {repo} likely accepted assignment after given date/time.{WHITE}')
             await log_info('Get Commit Hash Failed', 'Likely accepted assignment after given date/time.', repo)
             await repo.delete()
             continue
@@ -729,7 +738,7 @@ def extract_data_folder(initial_path, data_folder_name='data'):
         print(f'{LIGHT_GREEN}Data folder extracted to the output directory.{WHITE}')
 
 
-def print_end_report(students: dict, repos: list, len_not_accepted: int, cloned_num: int) -> None:
+def print_end_report(students: dict, repos: list, len_not_accepted: int, cloned_num: int, no_commits) -> None:
     '''
     Give end-user somewhat detailed report of what repos were able to be cloned, how many students accepted the assignments, etc.
     '''
@@ -739,7 +748,7 @@ def print_end_report(students: dict, repos: list, len_not_accepted: int, cloned_
     accept_str = f'{LIGHT_GREEN}{len(students)}{WHITE}' if len_not_accepted == 0 else f'{LIGHT_RED}{len(students) - len_not_accepted}{WHITE}'
     print(f'{LIGHT_GREEN}{accept_str}{LIGHT_GREEN}/{len(students)} accepted the assignment.{WHITE}')
 
-    commits_str = f'{LIGHT_GREEN}{len(NO_COMMITS & set(students.keys()))}{WHITE}' if len(NO_COMMITS) == 0 else f'{LIGHT_RED}{len(NO_COMMITS & set(students.keys()))}{WHITE}'
+    commits_str = f'{LIGHT_GREEN}{len(no_commits & set(students.keys()))}{WHITE}' if len(no_commits) == 0 else f'{LIGHT_RED}{len(no_commits & set(students.keys()))}{WHITE}'
     print(f'{LIGHT_RED}{commits_str}{LIGHT_GREEN}/{len(students)} had no commits.')
 
     clone_str = f'{LIGHT_GREEN}{cloned_num}{WHITE}' if cloned_num == len(repos) else f'{LIGHT_RED}{cloned_num}{WHITE}'

@@ -10,6 +10,8 @@ from .setup import setup
 
 from pathlib import Path
 
+MAX_THREADS = 200
+CONFIG_PATH = './data/config.json'
 VERSION = '2.0.0'
 PY_DEPENDENCIES = {'versionmanagerpy': '1.0.2', 'pygithub': '1.50'}
 GIT_DEPENDENCY = '2.30.0'
@@ -27,8 +29,10 @@ def check_and_install_dependencies():
 
 
 class MainMenu(model.Menu):
+    __slots__ = ['config', 'client', 'repos', 'students']
+
     def __init__(self):
-        setup_complete = Path('./data/config.json').exists()
+        setup_complete = Path(CONFIG_PATH).exists()
         check_and_install_dependencies()
 
         from versionmanagerpy import versionmanager
@@ -51,29 +55,42 @@ class MainMenu(model.Menu):
         config = model.MenuOption(4, 'Edit Config', config_event, False, setup_complete)
 
         if setup_complete:
-            clone_menu = CloneMenu()
-            add_menu = CloneMenu() # AddMenu()
-            manage_menu = CloneMenu() # ManageMenu()
-            config_menu = ConfigMenu() # ConfigMenu()
+            self.config = model.utils.read_config(CONFIG_PATH)
+            from github import Github
+            self.client = Github(self.config.token, pool_size=MAX_THREADS).get_organization(self.config.organization)
+            self.repos = self.client.get_repos()
+            self.students = model.repo_utils.get_students(self.config.students_csv)
+
+            clone_menu = CloneMenu(self.config, self.client, self.repos, self.students)
+            add_menu = CloneMenu(self.config, self.client, self.repos, self.students) # AddMenu()
+            manage_menu = CloneMenu(self.config, self.client, self.repos, self.students) # ManageMenu()
+            config_menu = ConfigMenu()
 
             clone_repos.on_select += clone_menu.run
             add.on_select += add_menu.run
             manage_repos.on_select += manage_menu.run
             config.on_select += config_menu.run
 
+
         def update_options():
             old_setup_complete = setup_complete
             new_setup_complete = Path('./data/config.json').exists()
-            clone_repos.enabled = new_setup_complete
-            # add.enabled = new_setup_complete
-            manage_repos.enabled = new_setup_complete
-            config.enabled = new_setup_complete
 
-            if old_setup_complete != new_setup_complete:
-                clone_menu = CloneMenu()
-                add_menu = CloneMenu() # AddMenu()
-                manage_menu = CloneMenu() # ManageMenu()
-                config_menu = ConfigMenu() # ConfigMenu()
+            if old_setup_complete != new_setup_complete and new_setup_complete:
+                clone_repos.enabled = new_setup_complete
+                manage_repos.enabled = new_setup_complete
+                config.enabled = new_setup_complete
+
+                self.config = model.utils.read_config(CONFIG_PATH)
+                from github import Github
+                self.client = Github(self.config.token, pool_size=MAX_THREADS).get_organization(self.config.organization)
+                self.repos = self.client.get_repos()
+                self.students = model.repo_utils.get_students(self.config.students_csv)
+
+                clone_menu = CloneMenu(self.config, self.client, self.repos, self.students)
+                add_menu = CloneMenu(self.config, self.client, self.repos, self.students) # AddMenu()
+                manage_menu = CloneMenu(self.config, self.client, self.repos, self.students) # ManageMenu()
+                config_menu = ConfigMenu()
 
                 clone_repos.on_select += clone_menu.run
                 add.on_select += add_menu.run
