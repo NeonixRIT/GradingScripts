@@ -200,3 +200,15 @@ def check_preset_names(config, name):
         if preset.name == name:
             return True
     return False
+
+
+def walklevel(some_dir, level=1):
+    some_dir = some_dir.rstrip(os.path.sep)
+    if not os.path.isdir(some_dir):
+        return None
+    num_sep = some_dir.count(os.path.sep)
+    for root, dirs, files in os.walk(some_dir):
+        yield root, dirs, files
+        num_sep_this = root.count(os.path.sep)
+        if num_sep + level <= num_sep_this:
+            del dirs[:]

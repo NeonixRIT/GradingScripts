@@ -7,6 +7,7 @@ import model
 from .clone_menu import CloneMenu
 from .config_menu import ConfigMenu
 from .setup import setup
+from .add_menu import AddMenu
 
 from pathlib import Path
 
@@ -46,7 +47,7 @@ class MainMenu(model.Menu):
         clone_repos = model.MenuOption(1, 'Clone Repos', clone_repos_event, False, setup_complete)
 
         add_event = model.Event()
-        add = model.MenuOption(2, 'Add Files', add_event, False, False)
+        add = model.MenuOption(2, 'Add Files', add_event, True, setup_complete)
 
         manage_repos_event = model.Event()
         manage_repos = model.MenuOption(3, 'Repo Manager', manage_repos_event, False, False)
@@ -62,12 +63,11 @@ class MainMenu(model.Menu):
             self.students = model.repo_utils.get_students(self.config.students_csv)
 
             clone_menu = CloneMenu(self.config, self.client, self.repos, self.students)
-            add_menu = CloneMenu(self.config, self.client, self.repos, self.students) # AddMenu()
             manage_menu = CloneMenu(self.config, self.client, self.repos, self.students) # ManageMenu()
             config_menu = ConfigMenu()
 
             clone_repos.on_select += clone_menu.run
-            add.on_select += add_menu.run
+            add.on_select += lambda: AddMenu(self.config)
             manage_repos.on_select += manage_menu.run
             config.on_select += config_menu.run
 
@@ -78,6 +78,7 @@ class MainMenu(model.Menu):
 
             if old_setup_complete != new_setup_complete and new_setup_complete:
                 clone_repos.enabled = new_setup_complete
+                add.enabled = new_setup_complete
                 manage_repos.enabled = new_setup_complete
                 config.enabled = new_setup_complete
 
@@ -88,12 +89,11 @@ class MainMenu(model.Menu):
                 self.students = model.repo_utils.get_students(self.config.students_csv)
 
                 clone_menu = CloneMenu(self.config, self.client, self.repos, self.students)
-                add_menu = CloneMenu(self.config, self.client, self.repos, self.students) # AddMenu()
                 manage_menu = CloneMenu(self.config, self.client, self.repos, self.students) # ManageMenu()
                 config_menu = ConfigMenu()
 
                 clone_repos.on_select += clone_menu.run
-                add.on_select += add_menu.run
+                add.on_select += lambda: AddMenu(self.config)
                 manage_repos.on_select += manage_menu.run
                 config.on_select += config_menu.run
 

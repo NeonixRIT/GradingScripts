@@ -8,4 +8,4 @@ data/config.json
 data/logs.log
 *__*
 .p*
-./data/files_to_add/*
+**/files_to_add/
