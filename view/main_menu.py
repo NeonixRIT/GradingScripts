@@ -13,7 +13,7 @@ from pathlib import Path
 
 MAX_THREADS = 200
 CONFIG_PATH = './data/config.json'
-VERSION = '2.0.0'
+VERSION = '2.0.1'
 PY_DEPENDENCIES = {'versionmanagerpy': '1.0.2', 'pygithub': '1.50'}
 GIT_DEPENDENCY = '2.30.0'
 
