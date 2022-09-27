@@ -362,7 +362,7 @@ def get_repos(assignment_name: str, org_repos: PaginatedList) -> Iterable:
             yield repo
 
 
-def is_valid_repo(repo: Repository, students: dict, assignment_name: str):
+def is_valid_repo(repo: Repository, students: dict, assignment_name: str) -> bool:
     is_student_repo = repo.name.replace(f'{assignment_name}-', '') in students
     if is_student_repo and len(list(repo.get_commits())) - 1 <= 0:
         print(f'{LIGHT_RED}[{repo.name}] No commits.{WHITE}')
@@ -604,6 +604,16 @@ def attempt_get_assignment():
     return assignment_name
 
 
+def attempt_get_tag():
+    '''
+    Get due tag name from input. Does not accept empty input.
+    '''
+    assignment_name = input('Tag Name: ') # get assignment name (repo prefix)
+    while not assignment_name: # if input is empty ask again
+        assignment_name = input('Please input an assignment name: ')
+    return assignment_name
+
+
 def get_time():
     '''
     Get assignment due time from input.
@@ -628,12 +638,17 @@ def get_date():
     return date_due
 
 
-def find_students_not_accepted(students: dict, repos: list, assignment_name: str, no_commits) -> set:
+def find_students_not_accepted(students: dict, repos: list, assignment_name: str, no_commits, tag_name: str = '') -> set:
     '''
     Find students who are on the class list but did not have their repos cloned
     '''
     students_keys = set(students.keys())
-    accepted = {repo.name.replace(f'{assignment_name}-', '') for repo in repos}
+    accepted = {}
+    if tag_name:
+        accepted = filter(lambda x: (x.get_tags().totalCount > 0 and (tag_name in x.get_tags()[0].name)), repos)
+        accepted = {repo.name.replace(f'{assignment_name}-', '') for repo in accepted}
+    else:
+        accepted = {repo.name.replace(f'{assignment_name}-', '') for repo in repos}
     return (students_keys ^ accepted) - no_commits
 
 
@@ -691,23 +706,23 @@ def attempt_make_client(token: str, organization: str, student_filename: str, ou
     raise ClientException('Unable to Create Github Client.')
 
 
-async def clone_repo(repo, path, filename, token, cloned_repos):
+async def clone_repo(repo, path, filename, token, due_tag, cloned_repos):
     # If no commits, skip repo
     destination_path = f'{path}/{filename}'
     print(f'    > Cloning [{repo.name}] {filename}...') # tell end user what repo is being cloned and where it is going to
     # run process on system that executes 'git clone' command. stdout is redirected so it doesn't output to end user
     clone_url = repo.clone_url.replace('https://', f'https://{token}@')
-    cmd = f'git clone --single-branch {clone_url} "{destination_path}"'
+    cmd = f'git clone --single-branch {clone_url} "{destination_path}"' if not due_tag else f'git clone --branch {due_tag} --single-branch {clone_url} "{destination_path}"'
     await run(cmd)
     local_repo = LocalRepo(destination_path, repo.name, filename, repo)
     await cloned_repos.put(local_repo)
     return True
 
 
-async def clone_all_repos(repos, path, students, assignment_name, token, cloned_repos):
+async def clone_all_repos(repos, path, students, assignment_name, token, due_tag, cloned_repos):
     tasks = []
     for repo in repos:
-        task = asyncio.ensure_future(clone_repo(repo, path, get_new_repo_name(repo, students, assignment_name), token, cloned_repos))
+        task = asyncio.ensure_future(clone_repo(repo, path, get_new_repo_name(repo, students, assignment_name), token, due_tag, cloned_repos))
         tasks.append(task)
     await asyncio.gather(*tasks)
 

@@ -212,3 +212,7 @@ def walklevel(some_dir, level=1):
         num_sep_this = root.count(os.path.sep)
         if num_sep + level <= num_sep_this:
             del dirs[:]
+
+
+def get_color_from_bool(boolean):
+    return LIGHT_GREEN if boolean else LIGHT_RED

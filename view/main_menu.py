@@ -90,15 +90,25 @@ class MainMenu(model.Menu):
                 clone_repos.on_select += clone_menu.run
                 add.on_select += lambda: AddMenu(self.config)
                 config.on_select += config_menu.run
-
-            if new_setup_complete:
+            elif new_setup_complete:
+                self.config = model.utils.read_config(CONFIG_PATH)
+                from github import Github
+                self.client = Github(self.config.token, pool_size=MAX_THREADS).get_organization(self.config.organization)
+                self.repos = self.client.get_repos()
                 self.students = model.repo_utils.get_students(self.config.students_csv)
+
+                clone_menu_new = CloneMenu(self.config, self.client, self.repos, self.students)
+                clone_repos_event_new = model.Event()
+                clone_repos_event_new += clone_menu_new.run
+                clone_repos.on_select = clone_repos_event_new
 
 
         setup_config_event = model.Event()
         setup_config_event += setup
         setup_config_event += update_options
         setup_config = model.MenuOption(5, 'Run Setup', setup_config_event)
+
+        config.on_select += update_options
 
         options = [clone_repos, add, manage_repos, config, setup_config]
         model.Menu.__init__(self, f'GCIS Grading Scripts {model.utils.get_color_from_status(update_status)}v{VERSION}{model.colors.WHITE}', options)
