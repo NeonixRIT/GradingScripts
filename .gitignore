@@ -6,6 +6,6 @@ tmp/logs.log
 data/config.json
 *.csv
 data/logs.log
-*__*
+*__pycache__*
 .p*
 **/files_to_add/
