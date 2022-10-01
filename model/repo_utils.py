@@ -8,9 +8,6 @@ import subprocess
 
 from datetime import date, datetime
 from typing import Iterable
-from github import Github, BadCredentialsException, UnknownObjectException
-from github.PaginatedList import PaginatedList
-from github.Repository import Repository
 from pathlib import Path
 '''
 Script to clone all or some repositories in a Github Organization based on repo prefix and usernames
@@ -252,7 +249,7 @@ class LocalRepo:
     '''
     __slots__ = ['__path', '__old_name', '__new_name', '__remote_repo']
 
-    def __init__(self, path: str, old_name: str, new_name: str, remote_repo: Repository):
+    def __init__(self, path: str, old_name: str, new_name: str, remote_repo):
         self.__path = path
         self.__old_name = old_name
         self.__new_name = new_name
@@ -353,7 +350,7 @@ def build_init_path(outdir: Path, assignment_name: str, date_inp, time_inp) -> P
     return init_path
 
 
-def get_repos(assignment_name: str, org_repos: PaginatedList) -> Iterable:
+def get_repos(assignment_name: str, org_repos) -> Iterable:
     '''
     generator for all repos in an organization matching assignment name prefix
     '''
@@ -362,7 +359,7 @@ def get_repos(assignment_name: str, org_repos: PaginatedList) -> Iterable:
             yield repo
 
 
-def is_valid_repo(repo: Repository, students: dict, assignment_name: str) -> bool:
+def is_valid_repo(repo, students: dict, assignment_name: str) -> bool:
     is_student_repo = repo.name.replace(f'{assignment_name}-', '') in students
     if is_student_repo and len(list(repo.get_commits())) - 1 <= 0:
         print(f'{LIGHT_RED}[{repo.name}] No commits.{WHITE}')
@@ -401,7 +398,7 @@ def get_students(student_filename: str) -> dict:
     return students # return dict mapping names to github username
 
 
-def get_new_repo_name(repo: Repository, students: dict, assignment_name: str) -> str:
+def get_new_repo_name(repo, students: dict, assignment_name: str) -> str:
     '''
     Returns repo name replacing github username sufix with student's real name
     '''
@@ -492,6 +489,7 @@ def print_release_changes_since_update(releases) -> None:
 
 
 def check_and_print_updates(token: str):
+    from github import Github
     client = Github(token.strip())
     repo = client.get_repo('NeonixRIT/GradingScripts')
     releases = repo.get_releases()
@@ -674,6 +672,7 @@ def prompt_invalid_tok_org(exception: Exception, token: str, organization: str, 
     '''
     Prompt user and attempt to fix invalid tokens/organizations in config.txt
     '''
+    from github import BadCredentialsException, UnknownObjectException
     ex_type = type(exception)
     prompt_str = 'O-Auth token' if ex_type is BadCredentialsException else 'Organization name'
 
@@ -694,6 +693,7 @@ def attempt_make_client(token: str, organization: str, student_filename: str, ou
     Attempts to make and return github client for the organization to get repo information with.
     Attempts to fix invalid organization/token issues and gives repeated attempts for other issues.
     '''
+    from github import Github, BadCredentialsException, UnknownObjectException
     attempts = 0
     while attempts < 5:
         try:
