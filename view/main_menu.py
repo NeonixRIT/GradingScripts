@@ -9,11 +9,12 @@ from .config_menu import ConfigMenu
 from .setup import setup
 from .add_menu import AddMenu
 
+from metrics import MetricsClient
 from pathlib import Path
 
 MAX_THREADS = 200
 CONFIG_PATH = './data/config.json'
-VERSION = '2.0.1'
+VERSION = '2.0.2'
 PY_DEPENDENCIES = {'versionmanagerpy': '1.0.2', 'pygithub': '1.50'}
 GIT_DEPENDENCY = '2.30.0'
 
@@ -29,9 +30,10 @@ def check_and_install_dependencies():
 
 
 class MainMenu(model.Menu):
-    __slots__ = ['config', 'client', 'repos', 'students']
+    __slots__ = ['config', 'client', 'repos', 'students', 'metrics_client']
 
-    def __init__(self):
+    def __init__(self, metrics_client: MetricsClient):
+        self.metrics_client = metrics_client
         setup_complete = Path(CONFIG_PATH).exists()
         check_and_install_dependencies()
 
@@ -61,11 +63,11 @@ class MainMenu(model.Menu):
             self.repos = self.client.get_repos()
             self.students = model.repo_utils.get_students(self.config.students_csv)
 
-            clone_menu = CloneMenu(self.config, self.client, self.repos, self.students)
+            clone_menu = CloneMenu(self.config, self.client, self.repos, self.students, self.metrics_client)
             config_menu = ConfigMenu()
 
             clone_repos.on_select += clone_menu.run
-            add.on_select += lambda: AddMenu(self.config)
+            add.on_select += lambda: AddMenu(self.config, self.metrics_client)
             config.on_select += config_menu.run
 
 
@@ -84,11 +86,11 @@ class MainMenu(model.Menu):
                 self.repos = self.client.get_repos()
                 self.students = model.repo_utils.get_students(self.config.students_csv)
 
-                clone_menu = CloneMenu(self.config, self.client, self.repos, self.students)
+                clone_menu = CloneMenu(self.config, self.client, self.repos, self.students, self.metrics_client)
                 config_menu = ConfigMenu()
 
                 clone_repos.on_select += clone_menu.run
-                add.on_select += lambda: AddMenu(self.config)
+                add.on_select += lambda: AddMenu(self.config, self.metrics_client)
                 config.on_select += config_menu.run
             elif new_setup_complete:
                 self.config = model.utils.read_config(CONFIG_PATH)
@@ -97,7 +99,7 @@ class MainMenu(model.Menu):
                 self.repos = self.client.get_repos()
                 self.students = model.repo_utils.get_students(self.config.students_csv)
 
-                clone_menu_new = CloneMenu(self.config, self.client, self.repos, self.students)
+                clone_menu_new = CloneMenu(self.config, self.client, self.repos, self.students, self.metrics_client)
                 clone_repos_event_new = model.Event()
                 clone_repos_event_new += clone_menu_new.run
                 clone_repos.on_select = clone_repos_event_new

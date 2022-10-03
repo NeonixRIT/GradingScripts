@@ -4,21 +4,22 @@
 import asyncio
 import os
 import shutil
+import time
 
+from metrics import MetricsClient
 from model.colors import LIGHT_RED, LIGHT_GREEN, CYAN, WHITE
-from model.menu import Menu
-from model.submenu import SubMenu
+from model import SubMenu
 from model.repo_utils import run
-
 from model.utils import walklevel
 
 from pathlib import Path
 
 class AddMenu(SubMenu):
-    __slots__ = ['repo_paths', 'read_files', 'config', 'repos_folder_path', 'repos_previous_commit_hash']
+    __slots__ = ['repo_paths', 'read_files', 'config', 'repos_folder_path', 'repos_previous_commit_hash', 'metrics_client']
 
-    def __init__(self, config):
+    def __init__(self, config, metrics_client: MetricsClient):
         self.config = config
+        self.metrics_client = metrics_client
         self.repo_paths = []
         self.repos_previous_commit_hash = []
         self.read_files = asyncio.Queue()
@@ -27,7 +28,8 @@ class AddMenu(SubMenu):
         while not Path(self.repos_folder_path).exists():
             self.repos_folder_path = input(f'{LIGHT_RED}Path entered does not exist{WHITE}\nEnter path to cloned repos: ')
 
-        for root, folders, files in walklevel(self.repos_folder_path):
+        start = time.perf_counter()
+        for root, folders, _ in walklevel(self.repos_folder_path):
             if '.git' in folders:
                 self.repo_paths.append(root)
 
@@ -44,6 +46,9 @@ class AddMenu(SubMenu):
         loop1.run_until_complete(self.do_all_git_workflow())
 
         print(f'{LIGHT_GREEN}Done.{WHITE}')
+        stop = time.perf_counter()
+
+        metrics_client.proxy.add_time(stop - start)
 
 
     async def read_file_to_mem(self, file_path):
@@ -77,9 +82,11 @@ class AddMenu(SubMenu):
                 pass
         elif final_path.endswith('.zip'):
             shutil.copyfile(info[0], final_path)
+            self.metrics_client.proxy.files_added(1)
         else:
             with open(final_path, 'w') as f:
                 f.write(content.decode())
+                self.metrics_client.proxy.files_added(1)
 
 
     async def write_to_repos(self):
@@ -108,43 +115,3 @@ class AddMenu(SubMenu):
             task = asyncio.ensure_future(self.do_git_workflow(repo_path, commit_message))
             tasks.append(task)
         await asyncio.gather(*tasks)
-
-
-
-
-# async def rollback_all_repos(cloned_repos, date_due, time_due):
-#     tasks = []
-#     while not cloned_repos.empty():
-#         repo = await cloned_repos.get()
-#         commit_hash = await repo.get_commit_hash(date_due, time_due)
-
-#         if not commit_hash:
-#             print(f'    > {LIGHT_RED}Get Commit Hash Failed: [{repo.old_name()}] {repo} likely accepted assignment after given date/time.{WHITE}')
-#             await log_info('Get Commit Hash Failed', 'Likely accepted assignment after given date/time.', repo)
-#             await repo.delete()
-#             continue
-
-#         task = asyncio.ensure_future(repo.rollback(commit_hash))
-#         tasks.append(task)
-#     await asyncio.gather(*tasks)
-
-
-# async def clone_repo(repo, path, filename, token, cloned_repos):
-#     # If no commits, skip repo
-#     destination_path = f'{path}/{filename}'
-#     print(f'    > Cloning [{repo.name}] {filename}...') # tell end user what repo is being cloned and where it is going to
-#     # run process on system that executes 'git clone' command. stdout is redirected so it doesn't output to end user
-#     clone_url = repo.clone_url.replace('https://', f'https://{token}@')
-#     cmd = f'git clone --single-branch {clone_url} "{destination_path}"'
-#     await run(cmd)
-#     local_repo = LocalRepo(destination_path, repo.name, filename, repo)
-#     await cloned_repos.put(local_repo)
-#     return True
-
-
-# async def clone_all_repos(repos, path, students, assignment_name, token, cloned_repos):
-#     tasks = []
-#     for repo in repos:
-#         task = asyncio.ensure_future(clone_repo(repo, path, get_new_repo_name(repo, students, assignment_name), token, cloned_repos))
-#         tasks.append(task)
-#     await asyncio.gather(*tasks)
