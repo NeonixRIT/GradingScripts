@@ -9,3 +9,4 @@ data/logs.log
 *__pycache__*
 .p*
 **/files_to_add/
+.DS*
