@@ -3,6 +3,9 @@ import threading
 import time
 
 from .metrics_client_proxy import MetricsProxy
+# from metrics_client_proxy import MetricsProxy # for testing
+
+INTERVAL = 5 # how often to repeat keep alive time in seconds
 
 class MetricsClient():
     '''
@@ -13,12 +16,12 @@ class MetricsClient():
     def __init__(self, addr: str, port: int):
         client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         client.connect((addr, port))
-        self.proxy = MetricsProxy(client)
+        self.proxy = MetricsProxy(client, INTERVAL)
         self.__start_keep_alive()
 
 
     def __start_keep_alive(self):
-        self.__keep_alive_thread = KeepAliveThread(self.proxy)
+        self.__keep_alive_thread = KeepAliveThread(self.proxy, INTERVAL)
         self.__keep_alive_thread.start()
 
     
@@ -30,7 +33,7 @@ class MetricsClient():
 class KeepAliveThread(threading.Thread):
     __slots__ = ['proxy', 'interval', 'kill']
 
-    def __init__(self, proxy: MetricsProxy, interval=5):
+    def __init__(self, proxy: MetricsProxy, interval: int):
         self.proxy = proxy
         self.interval = interval
         self.kill = False

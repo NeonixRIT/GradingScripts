@@ -3,6 +3,7 @@ import platform
 import hashlib
 
 from .duplexer import Duplexer
+# from duplexer import Duplexer # for testing
 
 from socket import socket
 
@@ -10,11 +11,12 @@ class MetricsProxy(Duplexer):
     '''
     ClientProxy is a class that takes a socket as a parameter and sends information to the server
     '''
-    __slots__ = ['client', '__UUID']
+    __slots__ = ['client', 'interval', '__UUID']
 
 
-    def __init__(self, socket: socket):
+    def __init__(self, socket: socket, interval: int):
         self.client = socket
+        self.interval = interval
         self.__UUID = hashlib.sha256(f'{platform.machine()}:{platform.processor()}:{platform.system()}:{platform.node()}'.encode()).hexdigest()
         Duplexer.__init__(self, socket)
         self.connect()
@@ -46,7 +48,7 @@ class MetricsProxy(Duplexer):
 
 
     def connect(self):
-        self.send(f'CONNECT {self.__UUID}')
+        self.send(f'CONNECT {self.interval} {self.__UUID}')
 
 
     def keep_alive(self):
