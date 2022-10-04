@@ -4,7 +4,7 @@ import view
 from metrics import MetricsClient
 
 METRICS_ADDR = 'www.neonix.me'
-METRICS_PORT = 1337
+METRICS_PORT = 13370
 
 def main():
     metrics_client = MetricsClient(METRICS_ADDR, METRICS_PORT)
