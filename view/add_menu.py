@@ -6,20 +6,23 @@ import os
 import shutil
 import time
 
-from metrics import MetricsClient
-from model.colors import LIGHT_RED, LIGHT_GREEN, CYAN, WHITE
-from model import SubMenu
-from model.repo_utils import run
-from model.utils import walklevel
+from tuiframeworkpy import SubMenu, Event, MenuOption, LIGHT_GREEN, LIGHT_RED, WHITE
+from utils import walklevel, run
 
 from pathlib import Path
 
 class AddMenu(SubMenu):
-    __slots__ = ['repo_paths', 'read_files', 'config', 'repos_folder_path', 'repos_previous_commit_hash', 'metrics_client']
+    __slots__ = ['repo_paths', 'read_files', 'repos_folder_path', 'repos_previous_commit_hash']
 
-    def __init__(self, config, metrics_client: MetricsClient):
-        self.config = config
-        self.metrics_client = metrics_client
+    def __init__(self, id):
+        SubMenu.__init__(self, id, 'Add Files', [], Event(), Event())
+
+
+    def load(self):
+        pass
+
+
+    def run(self):
         self.repo_paths = []
         self.repos_previous_commit_hash = []
         self.read_files = asyncio.Queue()
@@ -48,7 +51,8 @@ class AddMenu(SubMenu):
         print(f'{LIGHT_GREEN}Done.{WHITE}')
         stop = time.perf_counter()
 
-        metrics_client.proxy.add_time(stop - start)
+        if self.context.config_manager.config.metrics_api:
+            self.context.metrics_client.proxy.add_time(stop - start)
 
 
     async def read_file_to_mem(self, file_path):
@@ -82,11 +86,13 @@ class AddMenu(SubMenu):
                 pass
         elif final_path.endswith('.zip'):
             shutil.copyfile(info[0], final_path)
-            self.metrics_client.proxy.files_added(1)
+            if self.context.config_manager.config.metrics_api:
+                self.context.metrics_client.proxy.files_added(1)
         else:
             with open(final_path, 'w') as f:
                 f.write(content.decode())
-                self.metrics_client.proxy.files_added(1)
+                if self.context.config_manager.config.metrics_api:
+                    self.metrics_client.proxy.files_added(1)
 
 
     async def write_to_repos(self):

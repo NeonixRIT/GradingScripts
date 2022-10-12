@@ -3,8 +3,7 @@ import os
 import shutil
 import time
 
-from model.colors import LIGHT_GREEN, LIGHT_RED, CYAN, WHITE
-from model.utils import clear, make_new_config, save_config
+from tuiframeworkpy import LIGHT_GREEN, LIGHT_RED, CYAN, WHITE, clear
 
 from types import SimpleNamespace
 from pathlib import Path
@@ -52,7 +51,7 @@ def read_old_config_raw(old_config_path: str) -> dict:
     return {'token': token, 'organization': organization, 'students_csv': student_filename, 'out_dir': output_dir}
 
 
-def setup() -> None:
+def setup(config_manager) -> None:
     clear()
     if search_new_config():
         print(f'{LIGHT_RED}WARNING:{WHITE} Current config file detected. Running setup will overwrite current config file.')
@@ -66,15 +65,15 @@ def setup() -> None:
     found = time.perf_counter() - start
     if not old_config_path:
         clear()
-        config = make_new_config()
-        save_config(config)
+        config = config_manager.make_new_config()
+        config_manager.save_config(config)
         return
 
     confimation = input(f'Legacy config file found. Would you like to import these settings ({LIGHT_GREEN}Y{WHITE}/{LIGHT_RED}N{WHITE})? ').lower()
     if not confimation == 'y' or confimation == 'yes':
         clear()
-        config = make_new_config()
-        save_config(config)
+        config = config_manager.make_new_config()
+        config_manager.save_config(config)
         return
 
     start2 = time.perf_counter()
@@ -88,6 +87,6 @@ def setup() -> None:
         pass
     config.presets = []
     config.add_rollback = []
-    save_config(config)
+    config_manager.save_config(config)
     imported = time.perf_counter() - start2
     print(f'{LIGHT_GREEN}Legacy values found and imported in {round((found + imported) * 1000, 1)} milliseconds.{WHITE}')
