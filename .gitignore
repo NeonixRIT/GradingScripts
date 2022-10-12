@@ -10,3 +10,5 @@ data/logs.log
 .p*
 **/files_to_add/
 .DS*
+.idea
+/venv
