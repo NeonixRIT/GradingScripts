@@ -1,5 +1,0 @@
-Token: PlaceHolderToken
-Organization: PlaceHolderOrg
-Save Classroom Roster: Deprecated
-Classroom Roster Path: PlaceHolderPath
-Output Directory: exists_01_14_18_45
