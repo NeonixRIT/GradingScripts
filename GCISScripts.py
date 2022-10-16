@@ -1,8 +1,6 @@
 import os
 
 from datetime import datetime
-from threading import Thread
-from time import sleep
 
 from tuiframeworkpy import Dependency, ConfigEntry, TUI, find_option_by_prefix_text
 
