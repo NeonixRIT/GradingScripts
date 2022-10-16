@@ -11,4 +11,5 @@ data/logs.log
 **/files_to_add/
 .DS*
 .idea
+.fleet
 /venv
