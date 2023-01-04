@@ -13,12 +13,13 @@ from .model.utils import print_updates, clear
 
 # TODO: Add logging module
 
+
 class TUI:
     def __init__(self, version, dependencies: list[Dependency], config_path: str, config_entries: list[ConfigEntry], metrics_addr: str, metrics_port: int, proxy_methods: list, metrics_encrypt: bool, default_paths: list[str]) -> None:
         self.version = version
 
-        for dir in default_paths:
-            Path(dir).mkdir(parents=True, exist_ok=True)
+        for directory in default_paths:
+            Path(directory).mkdir(parents=True, exist_ok=True)
 
         versionamanagerpy = Dependency('versionmanagerpy', '1.0.2', 'pip')
         depends_man = DependencyManager([versionamanagerpy] + dependencies)
@@ -28,10 +29,14 @@ class TUI:
         conf_man = ConfigManager(config_path, config_entries + [debug_entry, metrics_entry])
 
         metrics_client = MetricsClient(metrics_addr, metrics_port, proxy_methods, metrics_encrypt)
+        self.__metrics_addr = metrics_addr
+        self.__metrics_port = metrics_port
+        self.__proxy_methods = proxy_methods
+        self.__metrics_encrypt = metrics_encrypt
         if not metrics_addr or not metrics_port:
             metrics_client = None
 
-        self.context = Context(conf_man, depends_man, metrics_client)
+        self.context = Context(conf_man, depends_man, metrics_client, self)
 
         self.on_error = Event()
         self.on_quit = Event()
@@ -40,21 +45,24 @@ class TUI:
         self.menus: dict[int, Menu]
         self.menus = {}
 
-
     def add_menu(self, menu: Menu) -> None:
         menu.context = self.context
         self.menus[menu.id] = menu
-
 
     def add_submenu(self, submenu: SubMenu, parent: Menu):
         submenu.parent = parent
         submenu.context = self.context
         self.menus[submenu.id] = submenu
 
-
     def open_menu(self, menu_id: int):
         self.menus[menu_id].open()
 
+    def update_metrics_client(self):
+        if self.context.config_manager.config.metrics_api:
+            self.context.metrics_client = MetricsClient(self.__metrics_addr, self.__metrics_port, self.__proxy_methods, self.__metrics_encrypt)
+            self.context.metrics_client.initialize()
+        else:
+            self.context.metrics_client = None
 
     def start(self) -> None:
         try:

@@ -6,7 +6,7 @@ from tuiframeworkpy import LIGHT_GREEN, LIGHT_RED, WHITE
 from .clone_menu import get_students
 
 MAX_THREADS = 200
-VERSION = '2.0.3'
+VERSION = '2.0.4'
 
 class MainMenu(Menu):
     __slots__ = ['client', 'repos', 'students']
@@ -20,6 +20,9 @@ class MainMenu(Menu):
         options = [clone_repos, add, manage_repos, config]
         Menu.__init__(self, id, f'GCIS Grading Scripts {LIGHT_GREEN}v{VERSION}{WHITE}', options)
 
+        self.client = None
+        self.repos = None
+        self.students = None
 
     def load(self):
         from github import Github

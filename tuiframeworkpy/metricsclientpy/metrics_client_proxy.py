@@ -8,11 +8,10 @@ from .client_duplexer import ClientDuplexer
 from socket import socket
 
 class MetricsProxy(ClientDuplexer):
-    '''
+    """
     ClientProxy is a class that takes a socket as a parameter and sends information to the server
-    '''
+    """
     __slots__ = ['client', 'interval', '__UUID']
-
 
     def __init__(self, socket: socket, interval: int, encrypt: bool, proxy_methods: list):
         self.client = socket
@@ -25,11 +24,9 @@ class MetricsProxy(ClientDuplexer):
         ClientDuplexer.__init__(self, socket, encrypt)
         self.connect()
 
-
     def __iadd__(self, func):
         setattr(self, func.__name__, types.MethodType(func, self))
         return self
-
 
     def connect(self):
         self.send(f'CONNECT {self.interval} {self.__UUID}')

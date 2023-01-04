@@ -8,7 +8,7 @@ from .menu_option import MenuOption
 class Menu:
     __slots__ = ['context', 'id', 'name', 'min_options', 'max_options', 'options', 'on_enter', 'on_exit', 'prompt_string', 'quit_string', 'invalid_input_string', 'disabled_option_string']
 
-    def __init__(self, id: int, name: str, options: list[MenuOption], on_enter: Event = Event(), on_exit: Event = Event()):
+    def __init__(self, id: int, name: str, options: list[MenuOption], on_enter: Event = None, on_exit: Event = None):
         self.context: Context
         self.name = name
         self.id = id
@@ -21,6 +21,10 @@ class Menu:
         self.min_options = 1
         self.max_options = len(options)
 
+        if on_enter is None:
+            on_enter = Event()
+        if on_exit is None:
+            on_exit = Event()
         self.on_enter = on_enter
         self.on_exit = on_exit
 
@@ -28,7 +32,6 @@ class Menu:
         self.quit_string = 'Closing...\nReturning to shell.\n\nHave a wonderful day!'
         self.invalid_input_string = f'You entered an invalid option.\n\nPlease enter a number between {self.min_options} and {self.max_options}.\nPress enter to try again.'
         self.disabled_option_string = 'This option is currently disabled.\nThis either means this feature is not implemented or your system does not meet the requirements to use this option.\nPress enter to select a different option.'
-
 
     def __str__(self) -> str:
         clear()
@@ -46,29 +49,24 @@ class Menu:
         out_str += '\n'
         return out_str
 
-
     def load(self) -> None:
         raise NotImplementedError
-
 
     def get_option(self) -> str:
         print(self)
         return input(self.prompt_string).lower()
 
-
     def handle_invalid_option(self) -> None:
-        '''
+        """
         Message to notify user of invalid input
-        '''
+        """
         input(self.invalid_input_string)
 
-
     def handle_disabled_option(self) -> None:
-        '''
+        """
         Message to notify user of invalid input
-        '''
+        """
         input(self.disabled_option_string)
-
 
     def quit(self) -> None:
         print(self.quit_string)
@@ -76,34 +74,32 @@ class Menu:
         clear()
         self.on_exit()
 
-
     def handle_option(self, user_option: str) -> tuple:
         user_option_int = 0
         if user_option == 'q' or user_option == 'quit':
             self.quit()
-            return (False, [])
+            return False, []
         elif not user_option:
             self.handle_invalid_option()
-            return (True, [])
+            return True, []
         else:
             try:
                 user_option_int = int(user_option)
                 if user_option_int not in range(self.min_options, self.max_options + 1):
                     self.handle_invalid_option()
-                    return (True, [])
+                    return True, []
             except ValueError:
-                self.handle_invalid_option() # if user input is not an int
-                return (True, [])
+                self.handle_invalid_option()  # if user input is not an int
+                return True, []
 
         clear()
         if not self.options[user_option_int].enabled:
             self.handle_disabled_option()
-            return (True, [])
+            return True, []
         result = self.options[user_option_int]()
         if self.options[user_option_int].pause:
             input('Press enter to continue...')
-        return (True, result)
-
+        return True, result
 
     def open(self) -> None:
         self.on_enter()

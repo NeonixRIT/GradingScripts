@@ -91,10 +91,10 @@ def get_color_from_bool(boolean):
     return LIGHT_GREEN if boolean else LIGHT_RED
 
 
-async def run(cmd: str, cwd=os.getcwd()) -> None:
-    '''
+async def run(cmd: str, cwd=os.getcwd()) -> tuple[str | None, str | None]:
+    """
     Asyncronously start a subprocess and run a command returning its output
-    '''
+    """
     proc = await asyncio.create_subprocess_shell(
         cmd,
         cwd=cwd,
@@ -107,7 +107,7 @@ async def run(cmd: str, cwd=os.getcwd()) -> None:
     return stdout.decode().strip() if stdout else None, stderr.decode().strip() if stderr else None
 
 
-def list_to_clone_preset(args: list) -> ClonePreset:
+def list_to_clone_preset(args: list) -> ClonePreset | None:
     if len(args) != 5:
         return
     return ClonePreset(args[0], args[1], args[2], args[3], args[4])
@@ -118,9 +118,9 @@ def list_to_multi_clone_presets(presets: list) -> list:
 
 
 def check_time(time_inp: str):
-    '''
-    Ensure proper time format
-    '''
+    """
+    Ensure proper 24hr time format
+    """
     if not re.match(r'\d{2}:\d{2}', time_inp):
         return False
     return True
