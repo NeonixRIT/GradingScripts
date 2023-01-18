@@ -9,10 +9,8 @@ class ClonePreset:
         self.csv_path = csv_path
         self.append_timestamp = append_timestamp
 
-
     def __repr__(self) -> str:
         return f'ClonePreset(folder_suffix: {self.folder_suffix}, clone_time: {self.clone_time}, name: {self.name}, csv_path: {self.csv_path}, append_timestamp: {self.append_timestamp})'
-
 
     def __eq__(self, other) -> bool:
         if type(other) != ClonePreset:

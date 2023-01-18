@@ -57,7 +57,7 @@ class EditPresetMenu(SubMenu):
         edit_csv.on_exit += self.load
         edit_app_time.on_exit += self.load
 
-        SubMenu.__init__(self, id, f'Manage Preset: {CYAN}{preset_name}{WHITE}', self.local_options)
+        SubMenu.__init__(self, id, f'Manage Preset: {CYAN}{preset_name}{WHITE}', self.local_options, Event(), Event())
 
 
     def load(self):

@@ -18,7 +18,6 @@ class PresetsMenu(SubMenu):
 
         SubMenu.__init__(self, id, 'Manage Presets', self.preset_options + self.local_options, Event(), Event())
 
-
     def load(self):
         self.preset_options = self.build_preset_options()
         for i, option in enumerate(self.local_options):
@@ -27,8 +26,8 @@ class PresetsMenu(SubMenu):
         self.options = dict()
         for menu_option in options:
             self.options[menu_option.number] = menu_option
-
-
+        self.max_options = len(options)
+        self.prompt_string = self.prompt_string = f'Please enter a number {LIGHT_GREEN}({self.min_options}-{self.max_options}){WHITE} or {LIGHT_RED}q/quit{WHITE} to return to the previous menu: '
 
     def build_preset_options(self):
         options = []
@@ -43,7 +42,6 @@ class PresetsMenu(SubMenu):
             option.on_exit += self.load
             options.append(option)
         return options
-
 
     def create_preset(self):
         prompt_prefix = 'Enter this preset\'s'
@@ -63,7 +61,6 @@ class PresetsMenu(SubMenu):
 
         self.context.config_manager.config.presets.append([name, folder_suffix, clone_time, csv_path, append_timestamp])
         self.context.config_manager.save_config()
-
 
     def check_preset_names(self, name):
         for preset in list_to_multi_clone_presets(self.context.config_manager.config.presets):

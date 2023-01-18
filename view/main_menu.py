@@ -6,7 +6,7 @@ from tuiframeworkpy import LIGHT_GREEN, LIGHT_RED, WHITE
 from .clone_menu import get_students
 
 MAX_THREADS = 200
-VERSION = '2.0.4'
+VERSION = '2.0.5'
 
 
 class MainMenu(Menu):

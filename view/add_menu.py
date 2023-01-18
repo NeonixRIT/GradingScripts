@@ -11,16 +11,15 @@ from utils import walklevel, run
 
 from pathlib import Path
 
+
 class AddMenu(SubMenu):
     __slots__ = ['repo_paths', 'read_files', 'repos_folder_path', 'repos_previous_commit_hash']
 
     def __init__(self, id):
         SubMenu.__init__(self, id, 'Add Files', [], Event(), Event())
 
-
     def load(self):
         pass
-
 
     def run(self):
         self.repo_paths = []
@@ -54,14 +53,12 @@ class AddMenu(SubMenu):
         if self.context.config_manager.config.metrics_api:
             self.context.metrics_client.proxy.add_time(stop - start)
 
-
     async def read_file_to_mem(self, file_path):
         content = None
         if not Path(file_path).is_dir():
             content = Path(file_path).read_bytes()
         await self.read_files.put([file_path, content])
         return True
-
 
     async def read_files_to_mem(self):
         tasks = []
@@ -73,7 +70,6 @@ class AddMenu(SubMenu):
                 task = asyncio.ensure_future(self.read_file_to_mem(str(Path(root) / Path(file))))
                 tasks.append(task)
         await asyncio.gather(*tasks)
-
 
     async def write_file(self, info, repo_path):
         path = info[0][len('./data/files_to_add/') - 2:] # self.config.files_to_add_path
@@ -92,8 +88,7 @@ class AddMenu(SubMenu):
             with open(final_path, 'w') as f:
                 f.write(content.decode())
                 if self.context.config_manager.config.metrics_api:
-                    self.metrics_client.proxy.files_added(1)
-
+                    self.context.metrics_client.proxy.files_added(1)
 
     async def write_to_repos(self):
         tasks = []
@@ -106,12 +101,10 @@ class AddMenu(SubMenu):
                 tasks.append(task)
         await asyncio.gather(*tasks)
 
-
     async def do_git_workflow(self, repo_path, commit_message):
         await run('git add *', repo_path)
         await run(f'git commit -m "{commit_message}"', repo_path)
         await run('git push', repo_path)
-
 
     async def do_all_git_workflow(self):
         tasks = []

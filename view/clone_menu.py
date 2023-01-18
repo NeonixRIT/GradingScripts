@@ -21,6 +21,7 @@ from pathlib import Path
 
 LOG_FILE_PATH = './data/logs.log'
 
+
 class ReposStruct:
     __slots__ = ['repos_w_students']
 
@@ -75,11 +76,11 @@ class CloneMenu(SubMenu):
         self.options = dict()
         for menu_option in options:
             self.options[menu_option.number] = menu_option
-
+        self.max_options = len(options)
+        self.prompt_string = self.prompt_string = f'Please enter a number {LIGHT_GREEN}({self.min_options}-{self.max_options}){WHITE} or {LIGHT_RED}q/quit{WHITE} to return to the previous menu: '
 
     def toggleCloneViaTag(self):
         self.clone_via_tag = not self.clone_via_tag
-
 
     def clone_repos(self, preset: ClonePreset = None):
         students_path = self.context.config_manager.config.students_csv
@@ -116,7 +117,6 @@ class CloneMenu(SubMenu):
                 date_str = due_date[4:].replace('-', '_')
                 time_str = preset.clone_time.replace(':', '_')
                 preset.folder_suffix += f'_{date_str}_{time_str}'
-
 
         start = time.perf_counter()
         parent_folder_path = f'{self.context.config_manager.config.out_dir}/{assignment_name}{preset.folder_suffix}' # prompt parent folder (IE assingment_name-AS in config.out_dir)
@@ -166,7 +166,6 @@ class CloneMenu(SubMenu):
         self.print_end_report(len(not_accepted), len(os.listdir(parent_folder_path)), stop - start)
         extract_data_folder(parent_folder_path)
 
-
     def print_end_report(self, len_not_accepted: int, cloned_num: int, clone_time: float) -> None:
         '''
         Give end-user somewhat detailed report of what repos were able to be cloned, how many students accepted the assignments, etc.
@@ -190,7 +189,6 @@ class CloneMenu(SubMenu):
             self.context.metrics_client.proxy.clone_time(clone_time)
             self.context.metrics_client.proxy.students_accepted(num_accepted)
 
-
     def build_preset_options(self) -> list:
         options = []
         for i, preset in enumerate(list_to_multi_clone_presets(self.context.config_manager.config.presets)):
@@ -203,7 +201,6 @@ class CloneMenu(SubMenu):
             option = MenuOption(i + 1, preset.name, option_event, Event(), Event())
             options.append(option)
         return options
-
 
     def is_valid_repo(self, repo, assignment_name: str, due_tag: str) -> bool:
         is_student_repo = repo.name.replace(f'{assignment_name}-', '') in self.students
@@ -218,7 +215,6 @@ class CloneMenu(SubMenu):
             return False
         return is_student_repo
 
-
     def get_repos_specified_students(self, assignment_repos, assignment_name: str, due_tag: str, repos_struct):
         '''
         return list of all repos in an organization matching assignment name prefix and is a student specified in the specified class roster csv
@@ -229,7 +225,7 @@ class CloneMenu(SubMenu):
 async def clone_repo(repo, path, filename, token, due_tag, cloned_repos):
     # If no commits, skip repo
     destination_path = f'{path}/{filename}'
-    print(f'    > Cloning [{repo.name}] {filename}...') # tell end user what repo is being cloned and where it is going to
+    print(f'    > Cloning [{repo.name}] {filename}...')  # tell end user what repo is being cloned and where it is going to
     # run process on system that executes 'git clone' command. stdout is redirected so it doesn't output to end user
     clone_url = repo.clone_url.replace('https://', f'https://{token}@')
     cmd = f'git clone --single-branch {clone_url} "{destination_path}"' if not due_tag else f'git clone --branch {due_tag} --single-branch {clone_url} "{destination_path}"'
@@ -381,11 +377,11 @@ def get_students(student_filename: str) -> dict:
 
     and returns a dictionary of students mapping github username to real name
     '''
-    students = {} # student dict
-    if Path(student_filename).exists(): # if classroom roster is found
-        with open(student_filename) as f_handle: # use with to auto close file
-            csv_reader = csv.reader(f_handle) # Use csv reader to separate values into a list
-            next(csv_reader) # skip header line
+    students = {}  # student dict
+    if Path(student_filename).exists():  # if classroom roster is found
+        with open(student_filename) as f_handle:  # use with to auto close file
+            csv_reader = csv.reader(f_handle)  # Use csv reader to separate values into a list
+            next(csv_reader)  # skip header line
             for student in csv_reader:
                 name = re.sub(r'([.]\s?|[,]\s?|\s)', '-', student[0]).rstrip(r'-')
                 github = student[1]
@@ -393,7 +389,7 @@ def get_students(student_filename: str) -> dict:
                     students[github] = name
     else:
         raise Exception(f'Classroom roster `{student_filename}` does not exist.')
-    return students # return dict mapping names to github username
+    return students  # return dict mapping names to github username
 
 
 def onerror(func, path: str, exc_info) -> None:
@@ -417,30 +413,24 @@ class LocalRepo:
         self.__new_name = new_name
         self.__remote_repo = remote_repo
 
-
     def __str__(self) -> str:
         return self.__new_name
-
 
     def __repr__(self) -> str:
         return f'LocalRepo[path={self.__path}, old_name={self.__old_name}, new_name={self.__new_name}]'
 
-
     def old_name(self) -> str:
         return self.__old_name
-
 
     async def reset_to_remote(self):
         await run('git fetch --all')
         await run(f'git reset --hard origin/{self.__remote_repo.default_branch}')
         await run('git pull')
 
-
     async def attempt_git_workflow(self, commit_message: str):
         await run('git add *', self.__path)
         await run(f'git commit -m "{commit_message}"', self.__path)
         await run('git push', self.__path)
-
 
     async def get_commit_hash(self, date_due: str, time_due: str) -> str:
         '''
@@ -455,7 +445,6 @@ class LocalRepo:
             print(f'{LIGHT_RED}[{self}] Get Commit Hash Failed: Likely accepted assignment after given date/time.{WHITE}')
             # await log_info('Get Commit Hash Failed', 'Likely accepted assignment after given date/time.', self, e)
             return None
-
 
     async def rollback(self, commit_hash: str) -> bool:
         '''
@@ -472,7 +461,6 @@ class LocalRepo:
             # await log_info('Rollback Failed', f'Likely invalid filename at commit `{commit_hash}`.', self, e)
             return False
 
-
     async def add(self, files_to_add: list[tuple[str, str, bool]], commit_message: str):
         await self.reset_to_remote()
 
@@ -484,10 +472,8 @@ class LocalRepo:
 
         await self.attempt_git_workflow(commit_message)
 
-
     async def delete(self) -> None:
         shutil.rmtree(self.__path, onerror=onerror)
-
 
     async def get_stats(self) -> list:
         raise NotImplementedError('This method has not been implemented.')
