@@ -8,6 +8,7 @@ from .clone_menu import get_students
 MAX_THREADS = 200
 VERSION = '2.0.4'
 
+
 class MainMenu(Menu):
     __slots__ = ['client', 'repos', 'students']
 
