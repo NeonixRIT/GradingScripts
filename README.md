@@ -6,7 +6,7 @@ Here is a brief guide for how to use the grading scripts for GCIS-123/124. In th
 ![image](https://user-images.githubusercontent.com/12210881/189549333-32fdfc26-5cb6-4008-9205-515f1efaa1a5.png)
 
 # Prerequisites
- - Python 3 or newer
+ - Python 3.10 or newer
  - Git 2.30.0 or newer
 
  NOTE: Required Python modules are installed at script start.
