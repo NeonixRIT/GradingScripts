@@ -4,7 +4,6 @@ from datetime import datetime
 
 from tuiframeworkpy import Dependency, ConfigEntry, TUI, find_option_by_prefix_text
 
-from utils import enable_color_if_windows
 from view import MainMenu, CloneMenu, PresetsMenu, ConfigMenu, SelectCSVMenu, AddMenu
 
 VERSION = '2.0.5'
