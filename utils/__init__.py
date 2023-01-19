@@ -72,6 +72,11 @@ def is_windows() -> bool:
     return os.name == 'nt'
 
 
+def enable_color_if_windows():
+    if is_windows():
+        os.system('color')
+
+
 REQ_CONFIG_FIELDS = {'token': None, 'organization': None, 'students_csv': None, 'out_dir': '.', 'presets': [], 'add_rollback': []}
 
 

@@ -4,6 +4,7 @@ from datetime import datetime
 
 from tuiframeworkpy import Dependency, ConfigEntry, TUI, find_option_by_prefix_text
 
+from utils import enable_color_if_windows
 from view import MainMenu, CloneMenu, PresetsMenu, ConfigMenu, SelectCSVMenu, AddMenu
 
 VERSION = '2.0.5'
@@ -53,8 +54,9 @@ def students_accepted(self, number: int):
     month = datetime.now().strftime("%B").lower()
     self.send(f'ACCEPTED {month} {number}')
 
-
 def main():
+    enable_color_if_windows()
+
     # Define Dependencies
     pygithub = Dependency('pygithub', '1.50', 'pip', version_regex=r'(\d+\.\d+)')
     git = Dependency('git', '2.30', '')
