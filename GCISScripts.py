@@ -6,7 +6,7 @@ from tuiframeworkpy import Dependency, ConfigEntry, TUI, find_option_by_prefix_t
 
 from view import MainMenu, CloneMenu, PresetsMenu, ConfigMenu, SelectCSVMenu, AddMenu
 
-VERSION = '2.0.5'
+VERSION = '2.0.6'
 
 
 def verify_token_org(config) -> set:
