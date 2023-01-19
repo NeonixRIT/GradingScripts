@@ -1,4 +1,4 @@
-from utils import get_color_from_status
+from utils import get_color_from_status, enable_color_if_windows
 
 from tuiframeworkpy import Menu, Event, MenuOption
 from tuiframeworkpy import LIGHT_GREEN, LIGHT_RED, WHITE
@@ -26,6 +26,8 @@ class MainMenu(Menu):
         self.students = None
 
     def load(self):
+        enable_color_if_windows()
+        
         from github import Github
         self.name = f'GCIS Grading Scripts {get_color_from_status(self.context.update_status)}v{VERSION}{WHITE}'
         try:

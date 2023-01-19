@@ -55,8 +55,6 @@ def students_accepted(self, number: int):
     self.send(f'ACCEPTED {month} {number}')
 
 def main():
-    enable_color_if_windows()
-
     # Define Dependencies
     pygithub = Dependency('pygithub', '1.50', 'pip', version_regex=r'(\d+\.\d+)')
     git = Dependency('git', '2.30', '')
