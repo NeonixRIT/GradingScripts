@@ -177,7 +177,7 @@ class CloneMenu(SubMenu):
         accept_str = f'{LIGHT_GREEN}{num_accepted}{WHITE}' if len_not_accepted == 0 else f'{LIGHT_RED}{num_accepted}{WHITE}'
         print(f'{LIGHT_GREEN}{accept_str}{LIGHT_GREEN}/{len(self.students)} accepted the assignment.{WHITE}')
 
-        num_no_commits = len(self.no_commits & set(self.students.keys())) if len(self.no_commits_students) == 0 else len(self.no_commits_students & set(self.students.keys()))
+        num_no_commits = len(self.no_commits_students & set(self.students.keys())) if len(self.no_commits_students) == 0 else len(self.no_commits_students & set(self.students.keys()))
         commits_str = f'{LIGHT_GREEN}{num_no_commits}{WHITE}' if len(self.no_commits_students) == 0 else f'{LIGHT_RED}{num_no_commits}{WHITE}'
         print(f'{LIGHT_RED}{commits_str}{LIGHT_GREEN}/{len(self.students)} had no commits.')
 

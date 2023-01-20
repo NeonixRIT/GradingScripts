@@ -3,9 +3,9 @@ import os
 from tuiframeworkpy import SubMenu, Event, MenuOption, LIGHT_GREEN, LIGHT_RED, CYAN, WHITE
 from utils import clear
 
+
 class SelectCSVMenu(SubMenu):
     __slots__ = ['student_csv_menu_quit']
-
 
     def __init__(self, id, context):
         self.student_csv_menu_quit = False
@@ -25,9 +25,8 @@ class SelectCSVMenu(SubMenu):
             menu_option = MenuOption(i + 1, f'{CYAN if file_name.replace("* ", "") == current_default else WHITE}{file_name}{WHITE}', on_select, Event(), Event(), False)
             options.append(menu_option)
 
-        SubMenu.__init__(self, id, 'Select New CSV File', options, only_one_prompt=True)
+        SubMenu.__init__(self, id, 'Select New CSV File', options, Event(), Event(), only_one_prompt=True)
         self.prompt_string = f'Please enter a number {LIGHT_GREEN}({self.min_options}-{self.max_options}){WHITE} or {LIGHT_RED}q/quit{WHITE} to enter the value manually: '
-
 
     def __set_config_value(self, value_name, new_value):
         clear()
@@ -35,7 +34,6 @@ class SelectCSVMenu(SubMenu):
         self.context.config_manager.save_config()
         self.context.config_manager.read_config()
         clear()
-
 
     def run(self):
         handle_option_return = (True, [])

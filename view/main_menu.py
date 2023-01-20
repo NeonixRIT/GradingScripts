@@ -35,3 +35,7 @@ class MainMenu(Menu):
             raise ConnectionError
         self.repos = self.client.get_repos()
         self.students = get_students(self.context.config_manager.config.students_csv)
+        self.on_enter += self.__update_students
+
+    def __update_students(self):
+        self.students = get_students(self.context.config_manager.config.students_csv)

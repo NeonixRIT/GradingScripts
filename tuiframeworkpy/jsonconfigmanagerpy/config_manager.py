@@ -67,12 +67,10 @@ class ConfigManager():
         else:
             self.read_config()
 
-
     def read_config(self) -> SimpleNamespace:
         config = json.loads(Path(self.config_path).read_text(), object_hook=lambda d: SimpleNamespace(**d))
         self.config = config
         self.verify_config()
-
 
     def save_config(self):
         self.verify_config()
@@ -88,7 +86,6 @@ class ConfigManager():
         with open(self.config_path, 'w') as f:
             f.write(config_str)
             f.flush()
-
 
     def make_new_config(self):
         print(f'{CYAN}Welcome to the initial setup.{WHITE}')
@@ -114,7 +111,6 @@ class ConfigManager():
         self.config = json.loads(values_formatted, object_hook=lambda d: SimpleNamespace(**d))
         self.verify_config()
 
-
     def verify_paths(self) -> set:
         invalid_fields = set()
         for path_entry in self.path_entries:
@@ -122,7 +118,6 @@ class ConfigManager():
             if not value or not Path(value).exists():
                 invalid_fields.add(path_entry)
         return invalid_fields
-
 
     def verify_config(self):
         missing_fields = set()
@@ -151,24 +146,20 @@ class ConfigManager():
         if len(invalid_fields) > 0:
             self.save_config()
 
-
     def bool_prompt(self, prompt: str, default_output: bool) -> bool:
         y_str = 'Y' if default_output else 'y'
         n_str = 'N' if not default_output else 'n'
         result = input(f'{prompt} ({LIGHT_GREEN}{y_str}{WHITE}/{LIGHT_RED}{n_str}{WHITE}): ')
         return default_output if not result else True if result.lower() == 'y' else False if result.lower() == 'n' else default_output
 
-
     def set_config_value(self, name: str, value: Any):
         setattr(self.config, name, value)
         self.save_config()
 
-
-    def __censor_string(self, string: str) -> str:
+    def __censor_string(self, string: str) -> str | None:
         if len(string) <= 7:
             return
         return ('*' * int(len(string) - len(string) / 5)) + string[-int(len(string) / 5):]
-
 
     def __flatten_set(self, iter: Iterable):
         return {item for sublist in iter for item in sublist}

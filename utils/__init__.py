@@ -15,6 +15,12 @@ def clear():
     print("\033c\033[3J\033[2J\033[0m\033[H")
 
 
+def censor_string(string: str) -> str | None:
+    if len(string) <= 7:
+        return
+    return ('*' * int(len(string) - len(string) / 5)) + string[-int(len(string) / 5):]
+
+
 def bool_prompt(prompt: str, default_output: bool) -> bool:
     y_str = 'Y' if default_output else 'y'
     n_str = 'N' if not default_output else 'n'

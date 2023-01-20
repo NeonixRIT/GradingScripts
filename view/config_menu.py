@@ -1,16 +1,17 @@
 from typing import Any
 
 from tuiframeworkpy import Event, MenuOption, SubMenu, LIGHT_GREEN, LIGHT_RED, WHITE
-from utils import clear, bool_prompt, get_color_from_bool
+from utils import clear, bool_prompt, get_color_from_bool, censor_string
 
 
 class ConfigMenu(SubMenu):
     __slots__ = ['custom_edit_fields']
 
     def __init__(self, id: int, custom_edit_fields: dict[str, Any] = None):
-        if custom_edit_fields is None:
-            custom_edit_fields = dict()
-        self.custom_edit_fields = custom_edit_fields
+        if custom_edit_fields is not None:
+            self.custom_edit_fields = custom_edit_fields
+        else:
+            self.custom_edit_fields = dict()
         SubMenu.__init__(self, id, 'Change Config Values', [], Event(), Event())
 
     def load(self):
@@ -19,6 +20,8 @@ class ConfigMenu(SubMenu):
             if not entry.prompt:
                 continue
             value = getattr(self.context.config_manager.config, entry.name)
+            if entry.censor:
+                value = censor_string(value)
             on_select = Event()
             on_select += lambda value_name=entry.name: self.edit_config_value(value_name)
             if entry.name == 'metrics_api':
