@@ -6,7 +6,7 @@ from tuiframeworkpy import Dependency, ConfigEntry, TUI, find_option_by_prefix_t
 
 from view import MainMenu, CloneMenu, PresetsMenu, ConfigMenu, SelectCSVMenu, AddMenu
 
-VERSION = '2.0.6'
+VERSION = '2.0.7'
 
 
 def verify_token_org(config) -> set:
@@ -53,7 +53,14 @@ def students_accepted(self, number: int):
     month = datetime.now().strftime("%B").lower()
     self.send(f'ACCEPTED {month} {number}')
 
+
 def main():
+    # Enable Color if using Windows
+    if os.name == 'nt':
+        import ctypes
+        kernel32 = ctypes.windll.kernel32
+        kernel32.SetConsoleMode(kernel32.GetStdHandle(-11), 7)
+
     # Define Dependencies
     pygithub = Dependency('pygithub', '1.50', 'pip', version_regex=r'(\d+\.\d+)')
     git = Dependency('git', '2.30', '')

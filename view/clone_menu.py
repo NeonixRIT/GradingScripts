@@ -37,7 +37,7 @@ class CloneMenu(SubMenu):
         self.repos = None
         self.students = None
 
-        self.cloned_repos = None # async queue
+        self.cloned_repos = None  # async queue
         self.no_commits_tuples = set()
         self.no_commits_students = set()
         self.local_options = []
@@ -49,7 +49,7 @@ class CloneMenu(SubMenu):
         self.local_options.append(manage_presets)
 
         toggle_clone_tag_event = Event()
-        toggle_clone_tag_event += self.toggleCloneViaTag
+        toggle_clone_tag_event += self.toggle_clone_via_tag
         toggle_clone_tag_event += self.load
         toggle_clone_tag = MenuOption(2, f'Clone Via Tag: {get_color_from_bool(self.clone_via_tag)}{self.clone_via_tag}{WHITE}', toggle_clone_tag_event, Event(), Event(), pause=False)
         self.local_options.append(toggle_clone_tag)
@@ -60,7 +60,6 @@ class CloneMenu(SubMenu):
         self.local_options.append(clone_repos)
 
         SubMenu.__init__(self, id, 'Clone Presets', self.preset_options + self.local_options, Event(), Event())
-
 
     def load(self):
         self.client = self.parent.client
@@ -79,7 +78,7 @@ class CloneMenu(SubMenu):
         self.max_options = len(options)
         self.prompt_string = self.prompt_string = f'Please enter a number {LIGHT_GREEN}({self.min_options}-{self.max_options}){WHITE} or {LIGHT_RED}q/quit{WHITE} to return to the previous menu: '
 
-    def toggleCloneViaTag(self):
+    def toggle_clone_via_tag(self):
         self.clone_via_tag = not self.clone_via_tag
 
     def clone_repos(self, preset: ClonePreset = None):
@@ -91,7 +90,7 @@ class CloneMenu(SubMenu):
             preset = ClonePreset('', '', '', students_path, False)
             preset.append_timestamp = bool_prompt('Append timestamp to repo folder name?\nIf using a tag name, it will append the tag instead', True)
 
-        assignment_name = attempt_get_assignment() # prompt assignment name
+        assignment_name = attempt_get_assignment()  # prompt assignment name
         assignment_name, self.repos = verify_assignment_name(assignment_name, self.repos)
 
         due_tag = ''
@@ -107,7 +106,8 @@ class CloneMenu(SubMenu):
 
         due_date = ''
         if not self.clone_via_tag:
-            preset.clone_time = get_time()
+            if not preset.clone_time:
+                preset.clone_time = get_time()
 
             due_date = get_date()
             while not check_date(due_date):
