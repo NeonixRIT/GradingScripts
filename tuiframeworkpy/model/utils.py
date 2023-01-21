@@ -6,8 +6,11 @@ from .colors import LIGHT_GREEN, LIGHT_RED, CYAN, WHITE
 from pathlib import Path
 from types import SimpleNamespace
 
+
 def clear():
-    print("\033c\033[3J\033[2J\033[0m\033[H")
+    print('\n' * 100)
+    print("\033c\033[3J\033[2J\033[0m\033[H" * 200)
+    os.system('cls' if os.name == 'nt' else 'clear')
 
 
 def get_color_from_status(status) -> str:

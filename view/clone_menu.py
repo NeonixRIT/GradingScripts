@@ -9,7 +9,7 @@ import threading
 from typing import Iterable
 
 from .clone_preset import ClonePreset
-from .presets_menu import PresetsMenu
+from .clone_report import CloneReport
 
 from utils import get_color_from_bool, bool_prompt, run, list_to_multi_clone_presets
 from tuiframeworkpy import SubMenu, Event, MenuOption
@@ -30,19 +30,24 @@ class ReposStruct:
 
 
 class CloneMenu(SubMenu):
-    __slots__ = ['students', 'client', 'repos', 'cloned_repos', 'no_commits_tuples', 'no_commits_students', 'local_options', 'preset_options', 'clone_via_tag']
+    __slots__ = ['students', 'loaded_csv', 'client', 'repos', 'filtered_repos', 'cloned_repos', 'no_commits_tuples', 'no_commits_students', 'local_options', 'preset_options', 'clone_via_tag', 'parameters', 'outputs_log']
 
     def __init__(self, id):
         self.client = None
         self.repos = None
         self.students = None
+        self.loaded_csv = None
 
+        self.filtered_repos = set()
         self.cloned_repos = None  # async queue
         self.no_commits_tuples = set()
         self.no_commits_students = set()
         self.local_options = []
         self.preset_options = []
         self.clone_via_tag = False
+
+        self.parameters = dict()
+        self.outputs_log = []
 
         manage_presets = MenuOption(1, 'Manage Presets', Event(), Event(), Event(), pause=False)
         manage_presets.on_exit += self.load
@@ -54,9 +59,13 @@ class CloneMenu(SubMenu):
         toggle_clone_tag = MenuOption(2, f'Clone Via Tag: {get_color_from_bool(self.clone_via_tag)}{self.clone_via_tag}{WHITE}', toggle_clone_tag_event, Event(), Event(), pause=False)
         self.local_options.append(toggle_clone_tag)
 
+        clone_history = MenuOption(3, f'Clone History', Event(), Event(), Event(), pause=False)
+        clone_history.on_exit += self.load
+        self.local_options.append(clone_history)
+
         clone_repos_event = Event()
         clone_repos_event += self.clone_repos
-        clone_repos = MenuOption(3, 'Continue Without Preset', clone_repos_event, Event(), Event())
+        clone_repos = MenuOption(4, 'Continue Without Preset', clone_repos_event, Event(), Event())
         self.local_options.append(clone_repos)
 
         SubMenu.__init__(self, id, 'Clone Presets', self.preset_options + self.local_options, Event(), Event())
@@ -65,6 +74,7 @@ class CloneMenu(SubMenu):
         self.client = self.parent.client
         self.repos = self.parent.repos
         self.students = self.parent.students
+        self.loaded_csv = self.context.config_manager.config.students_csv
 
         self.preset_options = self.build_preset_options()
         for i, option in enumerate(self.local_options):
@@ -83,15 +93,19 @@ class CloneMenu(SubMenu):
 
     def clone_repos(self, preset: ClonePreset = None):
         students_path = self.context.config_manager.config.students_csv
-        if preset is not None:
+        if preset is not None and self.loaded_csv != preset.csv_path:
             students_path = preset.csv_path
             self.students = get_students(students_path)
-        else:
+            self.loaded_csv = preset.csv_path
+        if students_path != self.loaded_csv:
+            self.students = get_students(students_path)
+            self.loaded_csv = students_path
+        if preset is None:
             preset = ClonePreset('', '', '', students_path, False)
             preset.append_timestamp = bool_prompt('Append timestamp to repo folder name?\nIf using a tag name, it will append the tag instead', True)
 
         assignment_name = attempt_get_assignment()  # prompt assignment name
-        assignment_name, self.repos = verify_assignment_name(assignment_name, self.repos)
+        assignment_name, self.filtered_repos = verify_assignment_name(assignment_name, self.repos)
 
         due_tag = ''
         if self.clone_via_tag:
@@ -101,7 +115,7 @@ class CloneMenu(SubMenu):
                 preset.folder_suffix += f'_{due_tag}'
 
         repos_struct = ReposStruct()
-        thread = threading.Thread(target=lambda: self.get_repos_specified_students(self.repos, assignment_name, due_tag, repos_struct))
+        thread = threading.Thread(target=lambda: self.get_repos_specified_students(self.filtered_repos, assignment_name, due_tag, repos_struct))
         thread.start()
 
         due_date = ''
@@ -128,66 +142,106 @@ class CloneMenu(SubMenu):
 
         os.mkdir(parent_folder_path)
         thread.join()
-        self.repos = repos_struct.repos_w_students
-        if len(self.repos) == 0:
-            print(f'{LIGHT_RED}No repos found for specified students.{WHITE}')
+
+        self.filtered_repos = repos_struct.repos_w_students
+        self.outputs_log = []
+
+        if len(self.filtered_repos) == 0:
+            err = f'{LIGHT_RED}No repos found for specified students.{WHITE}'
+            print(err)
+            self.outputs_log.append(err)
             return
 
         print()
-        print(f'Output directory: {parent_folder_path[len(self.context.config_manager.config.out_dir) + 1:]}')
+
+        outdir = parent_folder_path[len(self.context.config_manager.config.out_dir) + 1:]
+        outdir_str = f'Output directory: {outdir}'
+        print(outdir_str)
+        self.outputs_log.append(outdir_str)
 
         for repo_info in self.no_commits_tuples:
             repo_name = repo_info[0]
             repo_new = repo_info[1]
             text = f'    > {LIGHT_RED}Skipping because [{repo_name}] {repo_new} does not have the tag.{WHITE}' if self.clone_via_tag else f'    > {LIGHT_RED}Skipping because [{repo_name}] {repo_new} does not have any commits.{WHITE}'
             print(text)
+            self.outputs_log.append(text)
 
-        not_accepted = set()
-        not_accepted = find_students_not_accepted(self.students, self.repos, assignment_name, self.no_commits_students, due_tag)
+        not_accepted = find_students_not_accepted(self.students, self.filtered_repos, assignment_name, self.no_commits_students, due_tag)
         for student in not_accepted:
             not_accepted_text = f'    > {LIGHT_RED}Skipping because [{student}] {self.students[student]} did not accept the assignment.{WHITE}'
             print(not_accepted_text)
+            self.outputs_log.append(not_accepted_text)
 
         cloned_repos = asyncio.Queue()
 
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        loop.run_until_complete(clone_all_repos(self.repos, parent_folder_path, self.students, assignment_name, self.context.config_manager.config.token, due_tag, cloned_repos))
+        loop.run_until_complete(self.clone_all_repos(self.filtered_repos, parent_folder_path, self.students, assignment_name, self.context.config_manager.config.token, due_tag, cloned_repos))
 
         if not self.clone_via_tag:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            loop.run_until_complete(rollback_all_repos(cloned_repos, due_date, preset.clone_time))
+            loop.run_until_complete(self.rollback_all_repos(cloned_repos, due_date, preset.clone_time))
         else:
             del cloned_repos
 
         stop = time.perf_counter()
 
-        self.print_end_report(len(not_accepted), len(os.listdir(parent_folder_path)), stop - start)
+        end_report_str = self.print_end_report(len(not_accepted), len(os.listdir(parent_folder_path)), stop - start)
+        self.outputs_log.append(end_report_str)
         extract_data_folder(parent_folder_path)
 
-    def print_end_report(self, len_not_accepted: int, cloned_num: int, clone_time: float) -> None:
+        clone_logs = self.context.config_manager.config.clone_history
+        report = CloneReport(
+            assignment_name,
+            due_date,
+            preset.clone_time,
+            datetime.today().strftime('%Y-%m-%d'),
+            datetime.now().strftime('%H:%M'),
+            due_tag,
+            str(self.context.config_manager.config.students_csv),
+            tuple(self.outputs_log)
+        )
+        clone_logs.append(report)
+        if len(clone_logs) > 8:
+            clone_logs = clone_logs[1:]
+        self.context.config_manager.set_config_value('clone_history', clone_logs)
+
+        self.filtered_repos.clear()
+        self.no_commits_students.clear()
+        self.no_commits_tuples.clear()
+        del repos_struct
+
+    def print_end_report(self, len_not_accepted: int, cloned_num: int, clone_time: float) -> str:
         '''
         Give end-user somewhat detailed report of what repos were able to be cloned, how many students accepted the assignments, etc.
         '''
-        print()
-        print(f'{LIGHT_GREEN}Done.{WHITE}')
+        done_str = f'{LIGHT_GREEN}Done.{WHITE}'
 
         num_accepted = len(self.students) if len_not_accepted == 0 else len(self.students) - len_not_accepted
         accept_str = f'{LIGHT_GREEN}{num_accepted}{WHITE}' if len_not_accepted == 0 else f'{LIGHT_RED}{num_accepted}{WHITE}'
-        print(f'{LIGHT_GREEN}{accept_str}{LIGHT_GREEN}/{len(self.students)} accepted the assignment.{WHITE}')
+        full_accept_str = f'{LIGHT_GREEN}{accept_str}{LIGHT_GREEN}/{len(self.students)} accepted the assignment.{WHITE}'
 
         num_no_commits = len(self.no_commits_students & set(self.students.keys())) if len(self.no_commits_students) == 0 else len(self.no_commits_students & set(self.students.keys()))
         commits_str = f'{LIGHT_GREEN}{num_no_commits}{WHITE}' if len(self.no_commits_students) == 0 else f'{LIGHT_RED}{num_no_commits}{WHITE}'
-        print(f'{LIGHT_RED}{commits_str}{LIGHT_GREEN}/{len(self.students)} had no commits.')
+        full_commits_str = f'{LIGHT_RED}{commits_str}{LIGHT_GREEN}/{len(self.students)} had no commits.'
 
-        clone_str = f'{LIGHT_GREEN}{cloned_num}{WHITE}' if cloned_num == len(self.repos) else f'{LIGHT_RED}{cloned_num}{WHITE}'
-        print(f'{LIGHT_GREEN}Cloned and Rolled Back {clone_str}{LIGHT_GREEN}/{len(self.repos)} repos.{WHITE}')
+        clone_str = f'{LIGHT_GREEN}{cloned_num}{WHITE}' if cloned_num == len(self.filtered_repos) else f'{LIGHT_RED}{cloned_num}{WHITE}'
+        full_clone_str = f'{LIGHT_GREEN}Cloned and Rolled Back {clone_str}{LIGHT_GREEN}/{len(self.filtered_repos)} repos.{WHITE}'
+
+        print()
+        print(done_str)
+        print(full_accept_str)
+        print(full_commits_str)
+        print(full_clone_str)
 
         if self.context.config_manager.config.metrics_api:
             self.context.metrics_client.proxy.repos_cloned(cloned_num)
             self.context.metrics_client.proxy.clone_time(clone_time)
             self.context.metrics_client.proxy.students_accepted(num_accepted)
+
+        full_report_str = f'\n{done_str}\n{full_accept_str}\n{full_commits_str}\n{full_clone_str}'
+        return full_report_str
 
     def build_preset_options(self) -> list:
         options = []
@@ -203,15 +257,16 @@ class CloneMenu(SubMenu):
         return options
 
     def is_valid_repo(self, repo, assignment_name: str, due_tag: str) -> bool:
-        is_student_repo = repo.name.replace(f'{assignment_name}-', '') in self.students
+        student_github = repo.name.replace(f'{assignment_name}-', '')
+        is_student_repo = student_github in self.students
         has_tag = (repo.get_tags().totalCount > 0 and due_tag in [tag.name for tag in repo.get_tags()]) if self.clone_via_tag else True
         if is_student_repo and len(list(repo.get_commits())) - 1 <= 0:
             self.no_commits_tuples.add((repo.name, get_new_repo_name(repo, self.students, assignment_name)))
-            self.no_commits_students.add(repo.name.replace(f'{assignment_name}-', ''))
+            self.no_commits_students.add(student_github)
             return False
         elif is_student_repo and not has_tag:
             self.no_commits_tuples.add((repo.name, get_new_repo_name(repo, self.students, assignment_name)))
-            self.no_commits_students.add(repo.name.replace(f'{assignment_name}-', ''))
+            self.no_commits_students.add(student_github)
             return False
         return is_student_repo
 
@@ -221,43 +276,53 @@ class CloneMenu(SubMenu):
         '''
         repos_struct.repos_w_students = set(filter(lambda repo: self.is_valid_repo(repo, assignment_name, due_tag), assignment_repos))
 
+    async def clone_repo(self, repo, path, filename, token, due_tag, cloned_repos):
+        # If no commits, skip repo
+        destination_path = f'{path}/{filename}'
+        clone_str = f'    > Cloning [{repo.name}] {filename}...'
+        print(clone_str)  # tell end user what repo is being cloned and where it is going to
+        self.outputs_log.append(clone_str)
+        # run process on system that executes 'git clone' command. stdout is redirected so it doesn't output to end user
+        clone_url = repo.clone_url.replace('https://', f'https://{token}@')
+        cmd = f'git clone --single-branch {clone_url} "{destination_path}"' if not due_tag else f'git clone --branch {due_tag} --single-branch {clone_url} "{destination_path}"'
+        await run(cmd)
+        local_repo = LocalRepo(destination_path, repo.name, filename, repo)
+        await cloned_repos.put(local_repo)
+        return True
 
-async def clone_repo(repo, path, filename, token, due_tag, cloned_repos):
-    # If no commits, skip repo
-    destination_path = f'{path}/{filename}'
-    print(f'    > Cloning [{repo.name}] {filename}...')  # tell end user what repo is being cloned and where it is going to
-    # run process on system that executes 'git clone' command. stdout is redirected so it doesn't output to end user
-    clone_url = repo.clone_url.replace('https://', f'https://{token}@')
-    cmd = f'git clone --single-branch {clone_url} "{destination_path}"' if not due_tag else f'git clone --branch {due_tag} --single-branch {clone_url} "{destination_path}"'
-    await run(cmd)
-    local_repo = LocalRepo(destination_path, repo.name, filename, repo)
-    await cloned_repos.put(local_repo)
-    return True
+    async def clone_all_repos(self, repos, path, students, assignment_name, token, due_tag, cloned_repos):
+        tasks = []
+        for repo in repos:
+            task = asyncio.ensure_future(self.clone_repo(repo, path, get_new_repo_name(repo, students, assignment_name), token, due_tag, cloned_repos))
+            tasks.append(task)
+        await asyncio.gather(*tasks)
 
+    async def rollback_all_repos(self, cloned_repos, date_due, time_due):
+        tasks = []
+        while not cloned_repos.empty():
+            repo = await cloned_repos.get()
+            commit_hash = await repo.get_commit_hash(date_due, time_due)
 
-async def clone_all_repos(repos, path, students, assignment_name, token, due_tag, cloned_repos):
-    tasks = []
-    for repo in repos:
-        task = asyncio.ensure_future(clone_repo(repo, path, get_new_repo_name(repo, students, assignment_name), token, due_tag, cloned_repos))
-        tasks.append(task)
-    await asyncio.gather(*tasks)
+            if not commit_hash:
+                err_str = f'    > {CYAN}Commit hash failed for [{repo.old_name()}] {repo} retrying...{WHITE}'
+                res_str = f''
+                print(err_str, end='')
+                time.sleep(0.3)
+                commit_hash = await repo.get_commit_hash(date_due, time_due)
+                if not commit_hash:
+                    res_str = f'{LIGHT_RED} failed.{WHITE}'
+                    print(res_str)
+                    # await log_info('Get Commit Hash Failed', 'Likely accepted assignment after given date/time.', repo)
+                    await repo.delete()
+                    continue
+                else:
+                    res_str = f'{LIGHT_GREEN} success.{WHITE}'
+                    print(res_str)
+                self.outputs_log.append(err_str + res_str)
 
-
-async def rollback_all_repos(cloned_repos, date_due, time_due):
-    tasks = []
-    while not cloned_repos.empty():
-        repo = await cloned_repos.get()
-        commit_hash = await repo.get_commit_hash(date_due, time_due)
-
-        if not commit_hash:
-            print(f'    > {LIGHT_RED}Get Commit Hash Failed: [{repo.old_name()}] {repo} likely accepted assignment after given date/time.{WHITE}')
-            # await log_info('Get Commit Hash Failed', 'Likely accepted assignment after given date/time.', repo)
-            await repo.delete()
-            continue
-
-        task = asyncio.ensure_future(repo.rollback(commit_hash))
-        tasks.append(task)
-    await asyncio.gather(*tasks)
+            task = asyncio.ensure_future(repo.rollback(commit_hash))
+            tasks.append(task)
+        await asyncio.gather(*tasks)
 
 
 def extract_data_folder(initial_path, data_folder_name='data'):
@@ -281,8 +346,8 @@ def attempt_get_assignment():
     '''
     Get assignment name from input. Does not accept empty input.
     '''
-    assignment_name = input('Assignment Name: ') # get assignment name (repo prefix)
-    while not assignment_name: # if input is empty ask again
+    assignment_name = input('Assignment Name: ')  # get assignment name (repo prefix)
+    while not assignment_name:  # if input is empty ask again
         assignment_name = input('Please input an assignment name: ')
     return assignment_name
 
@@ -314,10 +379,10 @@ def get_date():
     Get assignment due date from input.
     '''
     date_due = input('Date Due (format = yyyy-mm-dd, press `enter` for current): ') # get due date
-    if not date_due: # If due date is blank use current date
-        current_date = date.today() # get current date
-        date_due = current_date.strftime('%Y-%m-%d') # get current date in year-month-day format
-        print(f'Using current date: {date_due}') # output what is being used to end user
+    if not date_due:  # If due date is blank use current date
+        current_date = date.today()  # get current date
+        date_due = current_date.strftime('%Y-%m-%d')  # get current date in year-month-day format
+        print(f'Using current date: {date_due}')  # output what is being used to end user
     return date_due
 
 
@@ -439,12 +504,12 @@ class LocalRepo:
         try:
             # run process on system that executes 'git rev-list' command. stdout is redirected so it doesn't output to end user
             cmd = f'git log --max-count=1 --date=local --before="{date_due.strip()} {time_due.strip()}" --format=%H'
-            stdout, _ = await run(cmd, self.__path)
+            stdout, stderr = await run(cmd, self.__path)
             return stdout
-        except Exception:
+        except Exception as e:
             print(f'{LIGHT_RED}[{self}] Get Commit Hash Failed: Likely accepted assignment after given date/time.{WHITE}')
             # await log_info('Get Commit Hash Failed', 'Likely accepted assignment after given date/time.', self, e)
-            return None
+            raise e
 
     async def rollback(self, commit_hash: str) -> bool:
         '''

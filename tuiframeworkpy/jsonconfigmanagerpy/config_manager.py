@@ -4,6 +4,7 @@ import os
 from .config_entry import ConfigEntry
 from .colors import LIGHT_GREEN, LIGHT_RED, CYAN, WHITE
 from .event import Event
+from .enhanced_json_decoder import EnhancedJSONEncoder
 
 from pathlib import Path
 from types import SimpleNamespace
@@ -41,7 +42,6 @@ class ConfigManager():
             self.default_config_dict[entry.name] = entry.default_value
             self.name_to_entry[entry.name] = entry
 
-
     def __str__(self) -> str:
         result = ''
         for key, value in self.config.__dict__.items():
@@ -51,14 +51,12 @@ class ConfigManager():
                 result += f'    {self.friendly_names_dict[key]}: {value}\n'
         return result
 
-
     def __iadd__(self, other: ConfigEntry | list[ConfigEntry] | Any):
         if isinstance(other, ConfigEntry) or (isinstance(other, list) and len(other) > 0 and isinstance(other[0], ConfigEntry)):
             self.config_entries.append(other)
         elif callable(other):
             self.custom_verify_methods += lambda: other(self.config)
         return self
-
 
     def initialize(self):
         if not Path(self.config_path).exists():
@@ -74,7 +72,7 @@ class ConfigManager():
 
     def save_config(self):
         self.verify_config()
-        config_str = json.dumps(self.config.__dict__, indent=4)
+        config_str = json.dumps(self.config.__dict__, indent=4, cls=EnhancedJSONEncoder)
         dirs = self.config_path.split('/')
 
         path = ''
@@ -107,7 +105,7 @@ class ConfigManager():
 
             values[entry.name] = entry_value
 
-        values_formatted = json.dumps(values, indent=4)
+        values_formatted = json.dumps(values, indent=4, cls=EnhancedJSONEncoder)
         self.config = json.loads(values_formatted, object_hook=lambda d: SimpleNamespace(**d))
         self.verify_config()
 

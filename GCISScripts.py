@@ -4,7 +4,7 @@ from datetime import datetime
 
 from tuiframeworkpy import Dependency, ConfigEntry, TUI, find_option_by_prefix_text
 
-from view import MainMenu, CloneMenu, PresetsMenu, ConfigMenu, SelectCSVMenu, AddMenu
+from view import MainMenu, CloneMenu, PresetsMenu, ConfigMenu, SelectCSVMenu, AddMenu, CloneHistoryMenu
 
 VERSION = '2.0.7'
 
@@ -71,7 +71,8 @@ def main():
     students_csv = ConfigEntry('students_csv', 'Students CSV Path', None, 'Enter path of csv file containing username and name of students: ', prompt=True, is_path=True)
     out_dir_entry = ConfigEntry('out_dir', 'Output Folder', '.', 'Output directory for assignment files (`enter` for current directory): ', prompt=True, is_path=True)
     presets = ConfigEntry('presets', 'Presets', [], None, prompt=False)
-    config_entries = [token_entry, org_entry, students_csv, out_dir_entry, presets]
+    clone_history = ConfigEntry('clone_history', 'Clone Histroy', [], None, prompt=False)
+    config_entries = [token_entry, org_entry, students_csv, out_dir_entry, presets, clone_history]
 
     # Define Default Folders
     default_paths = ['./data', './data/csvs', './data/files_to_add']
@@ -94,6 +95,9 @@ def main():
     preset_menu = PresetsMenu(11)  # submenu of clone menu
     tui.add_submenu(preset_menu, clone_menu)
 
+    clone_history_menu = CloneHistoryMenu(12)  # submenu of clone menu
+    tui.add_submenu(clone_history_menu, clone_menu)
+
     add_menu = AddMenu(20)  # add menu
     tui.add_submenu(add_menu, main_menu)
 
@@ -105,6 +109,7 @@ def main():
     # Setup Menu Options That Open Submenus
     main_menu.options[1].on_select += lambda: tui.open_menu(clone_menu.id)
     find_option_by_prefix_text(clone_menu, 'Manage Presets').on_select += lambda: tui.open_menu(preset_menu.id)
+    find_option_by_prefix_text(clone_menu, 'Clone History').on_select += lambda: tui.open_menu(clone_history_menu.id)
     main_menu.options[4].on_select += lambda: tui.open_menu(config_menu.id)
     main_menu.options[2].on_select += lambda: tui.open_menu(add_menu.id)
 

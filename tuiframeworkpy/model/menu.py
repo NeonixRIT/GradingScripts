@@ -6,9 +6,9 @@ from .menu_option import MenuOption
 
 
 class Menu:
-    __slots__ = ['context', 'id', 'name', 'min_options', 'max_options', 'options', 'on_enter', 'on_exit', 'prompt_string', 'quit_string', 'invalid_input_string', 'disabled_option_string']
+    __slots__ = ['context', 'id', 'name', 'min_options', 'max_options', 'options', 'on_enter', 'on_exit', 'prompt_string', 'quit_string', 'invalid_input_string', 'disabled_option_string', 'legend']
 
-    def __init__(self, id: int, name: str, options: list[MenuOption], on_enter: Event = None, on_exit: Event = None):
+    def __init__(self, id: int, name: str, options: list[MenuOption], on_enter: Event = None, on_exit: Event = None, legend: str = ''):
         self.context: Context
         self.name = name
         self.id = id
@@ -27,6 +27,7 @@ class Menu:
             on_exit = Event()
         self.on_enter = on_enter
         self.on_exit = on_exit
+        self.legend = legend
 
         self.prompt_string = f'Please enter a number {LIGHT_GREEN}({self.min_options}-{self.max_options}){WHITE} or {LIGHT_RED}q/quit{WHITE} to quit the program: '
         self.quit_string = 'Closing...\nReturning to shell.\n\nHave a wonderful day!'
@@ -40,9 +41,11 @@ class Menu:
         middle_len -= len(LIGHT_GREEN) if LIGHT_GREEN in self.name else 0
         middle_len -= len(CYAN) if CYAN in self.name else 0
         middle_len -= len(WHITE) if WHITE in self.name else 0
+        legend_str = f'Legend: {self.legend}\n' if self.legend else ''
         out_str = ('*' * middle_len) + '\n' + \
             f'************** {LIGHT_GREEN}{self.name}{WHITE} **************\n' + \
             ('*' * middle_len) + '\n\n' + \
+            legend_str + \
             'Enter Selection:\n'
         for option in self.options:
             out_str += f'    {self.options[option]}\n'

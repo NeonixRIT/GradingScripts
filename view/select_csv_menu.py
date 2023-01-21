@@ -30,8 +30,7 @@ class SelectCSVMenu(SubMenu):
 
     def __set_config_value(self, value_name, new_value):
         clear()
-        setattr(self.context.config_manager.config, value_name, new_value)
-        self.context.config_manager.save_config()
+        self.context.config_manager.set_config_value(value_name, new_value)
         self.context.config_manager.read_config()
         clear()
 

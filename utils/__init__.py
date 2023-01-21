@@ -12,7 +12,9 @@ from types import SimpleNamespace
 
 
 def clear():
-    print("\033c\033[3J\033[2J\033[0m\033[H")
+    print('\n' * 100)
+    print("\033c\033[3J\033[2J\033[0m\033[H" * 200)
+    os.system('cls' if os.name == 'nt' else 'clear')
 
 
 def censor_string(string: str) -> str | None:
@@ -109,7 +111,6 @@ async def run(cmd: str, cwd=os.getcwd()) -> tuple[str | None, str | None]:
     )
 
     stdout, stderr = await proc.communicate()
-
     return stdout.decode().strip() if stdout else None, stderr.decode().strip() if stderr else None
 
 

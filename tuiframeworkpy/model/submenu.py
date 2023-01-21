@@ -37,8 +37,9 @@ class SubMenu(Menu):
                 return True, user_option_int, []
 
         clear()
+        op_pause = self.options[user_option_int].pause
         result = self.options[user_option_int]()
-        if self.options[user_option_int].pause:
+        if op_pause:
             input('Press enter to continue...')
         return not self.only_one_prompt, user_option_int, result
 
