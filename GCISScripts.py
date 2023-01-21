@@ -1,8 +1,6 @@
 import os
 
 from datetime import datetime
-import subprocess
-import sys
 
 from tuiframeworkpy import Dependency, ConfigEntry, TUI, find_option_by_prefix_text, LIGHT_RED, WHITE
 

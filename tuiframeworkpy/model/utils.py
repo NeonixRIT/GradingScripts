@@ -7,6 +7,21 @@ from pathlib import Path
 from types import SimpleNamespace
 
 
+def spawn_program_and_die(program, exit_code=0):
+    import subprocess
+    import sys
+    subprocess.Popen(program)
+    sys.exit(exit_code)
+
+
+def autoupdate():
+    import sys
+    python_path = sys.executable
+    if not python_path:
+        print(f'{LIGHT_RED}Unable to spawn update process. Please update manually{WHITE}')
+    spawn_program_and_die([python_path, './utils/update.py'])
+
+
 def clear():
     print('\n' * 100)
     print("\033c\033[3J\033[2J\033[0m\033[H" * 200)
@@ -34,6 +49,13 @@ def print_release_changes_since_update(releases, current_version) -> None:
             print(f'{LIGHT_GREEN}Version: {release_version}\nDescription:\n{release.body}\n{WHITE}')
 
 
+def bool_prompt(prompt: str, default_output: bool) -> bool:
+    y_str = 'Y' if default_output else 'y'
+    n_str = 'N' if not default_output else 'n'
+    result = input(f'{prompt} ({LIGHT_GREEN}{y_str}{WHITE}/{LIGHT_RED}{n_str}{WHITE}): ')
+    return default_output if not result else True if result.lower() == 'y' else False if result.lower() == 'n' else default_output
+
+
 def print_updates(current_version: str):
     from github import Github
     client = Github()
@@ -41,6 +63,9 @@ def print_updates(current_version: str):
     releases = repo.get_releases()
     print_release_changes_since_update(releases, current_version)
     input('Press enter to continue...')
+    # res = bool_prompt('Do you wish to update now?', True)
+    # if res:
+    #     autoupdate()
 
 
 def make_new_config() -> SimpleNamespace:
