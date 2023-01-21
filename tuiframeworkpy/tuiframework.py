@@ -14,6 +14,21 @@ from .model.utils import print_updates, clear
 # TODO: Add logging module
 
 
+def spawn_program_and_die(program, exit_code=0):
+    import subprocess
+    import sys
+    subprocess.Popen(program)
+    sys.exit(exit_code)
+
+
+def autoupdate():
+    import sys
+    python_path = sys.executable
+    if not python_path:
+        print(f'{LIGHT_RED}Unable to spawn update process. Please update manually{WHITE}')
+    spawn_program_and_die([python_path, './utils/update.py'])
+
+
 class TUI:
     def __init__(self, version, dependencies: list[Dependency], config_path: str, config_entries: list[ConfigEntry], metrics_addr: str, metrics_port: int, proxy_methods: list, metrics_encrypt: bool, default_paths: list[str]) -> None:
         self.version = version
@@ -79,6 +94,10 @@ class TUI:
             self.context.update_status = update_status
             if update_status == versionmanager.Status.OUTDATED:
                 print_updates(self.version)
+            from utils import bool_prompt
+            res = bool_prompt('Do you wish to update now?', True)
+            if res:
+                autoupdate()
             self.context.config_manager.initialize()
 
             if self.context.config_manager.config.metrics_api:

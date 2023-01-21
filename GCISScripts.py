@@ -1,12 +1,14 @@
 import os
 
 from datetime import datetime
+import subprocess
+import sys
 
-from tuiframeworkpy import Dependency, ConfigEntry, TUI, find_option_by_prefix_text
+from tuiframeworkpy import Dependency, ConfigEntry, TUI, find_option_by_prefix_text, LIGHT_RED, WHITE
 
 from view import MainMenu, CloneMenu, PresetsMenu, ConfigMenu, SelectCSVMenu, AddMenu, CloneHistoryMenu
 
-VERSION = '2.0.7'
+VERSION = '2.1.0'
 
 
 def verify_token_org(config) -> set:
