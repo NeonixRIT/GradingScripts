@@ -35,6 +35,7 @@ def download_and_update(save_path):
 
     zip_file = zipfile.ZipFile(save_path)
     zip_file.extractall()
+    zip_file.close()
 
     import shutil
     source = f'./GradingScripts-{version}/'
@@ -50,7 +51,7 @@ def download_and_update(save_path):
             else:
                 os.remove(dst_path)
         shutil.move(src_path, dst_path)
-    shutil.rmtree(save_path, onerror=onerror)
+    os.remove(save_path)
     shutil.rmtree(source, onerror=onerror)
 
 
@@ -61,6 +62,7 @@ if update_with_git:
     except Exception as e:
         print('Unable to complete auto update.')
         exit()
-    subprocess.run([sys.executable, './GCISScripts.py'], cwd=sys.argv[2])
 elif update_with_download:
-    download_and_update(f'./GradingScripts-{sys.argv[1]}.zip')
+    download_and_update(f'./GCISGradingScript-temp-{sys.argv[1]}.zip')
+
+subprocess.run([sys.executable, './GCISScripts.py'], cwd=sys.argv[2])
