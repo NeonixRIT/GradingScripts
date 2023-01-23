@@ -72,7 +72,9 @@ def print_updates(current_version: str):
     # input('Press enter to continue...')
     res = bool_prompt('Do you wish to update now?', True)
     if res:
-        update()
+        print(list(releases)[0].tag_name, os.getcwd())
+        input()
+        update(list(releases)[0].tag_name, os.getcwd())
 
 
 def make_new_config() -> SimpleNamespace:
