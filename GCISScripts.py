@@ -2,7 +2,7 @@ import os
 
 from datetime import datetime
 
-from tuiframeworkpy import Dependency, ConfigEntry, TUI, find_option_by_prefix_text, LIGHT_RED, WHITE
+from tuiframeworkpy import Dependency, ConfigEntry, TUI, find_option_by_prefix_text
 
 from view import MainMenu, CloneMenu, PresetsMenu, ConfigMenu, SelectCSVMenu, AddMenu, CloneHistoryMenu
 
@@ -71,7 +71,7 @@ def main():
     students_csv = ConfigEntry('students_csv', 'Students CSV Path', None, 'Enter path of csv file containing username and name of students: ', prompt=True, is_path=True)
     out_dir_entry = ConfigEntry('out_dir', 'Output Folder', '.', 'Output directory for assignment files (`enter` for current directory): ', prompt=True, is_path=True)
     presets = ConfigEntry('presets', 'Presets', [], None, prompt=False)
-    clone_history = ConfigEntry('clone_history', 'Clone Histroy', [], None, prompt=False)
+    clone_history = ConfigEntry('clone_history', 'Clone History', [], None, prompt=False)
     config_entries = [token_entry, org_entry, students_csv, out_dir_entry, presets, clone_history]
 
     # Define Default Folders
@@ -85,7 +85,7 @@ def main():
     tui.context.config_manager += verify_token_org
 
     # Define Main Menu
-    main_menu = MainMenu(0)
+    main_menu = MainMenu(0, VERSION)
     tui.add_menu(main_menu)
 
     # Define Submenus
