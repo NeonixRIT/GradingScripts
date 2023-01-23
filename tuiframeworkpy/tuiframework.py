@@ -81,6 +81,10 @@ class TUI:
             self.context.update_status = update_status
             if update_status == versionmanager.Status.OUTDATED:
                 print_updates(self.version, self)
+
+            if self.update_instance:
+                exit()
+
             self.context.config_manager.initialize()
 
             if self.context.config_manager.config.metrics_api:
@@ -90,8 +94,7 @@ class TUI:
             for menu in self.menus:
                 self.menus[menu].load()
 
-            if not self.update_instance:
-                self.menus[0].open()
+            self.menus[0].open()
         except (ConnectionError, KeyboardInterrupt, Exception) as e:
             clear()
             self.on_error()
@@ -99,4 +102,4 @@ class TUI:
                 print(f'\n{LIGHT_RED}FATAL: Unknown Error Occured.{WHITE}\n\n{CYAN}{e}{WHITE}\n')
                 if getattr(self.context.config_manager.config, 'debug', True):
                     raise e
-            self.menus[0].quit()
+                self.menus[0].quit()
