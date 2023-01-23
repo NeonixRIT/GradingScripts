@@ -40,6 +40,8 @@ def download_and_update(save_path):
     source = f'./GradingScripts-{version}/'
     allfiles = os.listdir(source)
     for f in allfiles:
+        if 'data' in f:
+            continue
         src_path = os.path.join(source, f)
         dst_path = os.path.join(script_location, f)
         if Path(dst_path).exists():
@@ -60,3 +62,5 @@ if update_with_git:
         print('Unable to complete auto update.')
         exit()
     subprocess.run([sys.executable, './GCISScripts.py'], cwd=sys.argv[2])
+elif update_with_download:
+    download_and_update(f'./GradingScripts-{sys.argv[1]}.zip')

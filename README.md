@@ -64,7 +64,7 @@ I also recommend placing the classroom roster file into the `./data/csvs` folder
 After you enter all the information, the script will clone all the repositories and put them all into the folder specified. Inside will be a folder named after the assignment name and the date/time specified.
 ![image](https://user-images.githubusercontent.com/12210881/148616913-aa034432-6ba8-4791-b99d-c5b0297f6ace.png)
 
-## One last thing to note, first time running the script but be done with admin privileges, so start it in an admin powershell/cmd/whatever window. This is to properly install the pip packages required for the script to work.
+## One last thing to note, first time running the script might need to be done with admin privileges. So, start it in an admin powershell/cmd/whatever window. This is to properly install the pip packages required for the script to work.
 ## Congratulations! You’ve either read or skimmed through my entire guide. May your grading be easy and enjoyable thanks to these scripts!
 
 ### TODO
