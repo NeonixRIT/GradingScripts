@@ -9,7 +9,7 @@ from pathlib import Path
 update_with_git = False
 update_with_download = False
 
-if Path('../.git').exists():
+if Path(sys.argv[2] + '/.git').exists():
     update_with_git = True
 else:
     update_with_download = True
@@ -54,10 +54,9 @@ def download_and_update(save_path):
 
 if update_with_git:
     try:
-        subprocess.run(['git', 'fetch', 'origin'], cwd='../', stdout=subprocess.PIPE, stdin=subprocess.PIPE)
-        subprocess.run(['git', 'reset', '--hard', 'origin/master'], cwd='../', stdout=subprocess.PIPE, stdin=subprocess.PIPE)
+        subprocess.run(['git', 'fetch', 'origin'], cwd=sys.argv[2], stdout=subprocess.PIPE, stdin=subprocess.PIPE)
+        subprocess.run(['git', 'reset', '--hard', 'origin/master'], cwd=sys.argv[2], stdout=subprocess.PIPE, stdin=subprocess.PIPE)
     except Exception as e:
         print('Unable to complete auto update.')
         exit()
-    print('Update was a success.')
-    subprocess.run([sys.executable, '../GCISScripts.py'], cwd='../')
+    subprocess.run([sys.executable, './GCISScripts.py'], cwd=sys.argv[2])

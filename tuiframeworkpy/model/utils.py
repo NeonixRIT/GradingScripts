@@ -26,8 +26,7 @@ def get_application_folder():
 
 def update(latest_version, cwd):
     python_path = sys.executable
-    with subprocess.Popen([python_path, 'update.py', latest_version, cwd], cwd=get_application_folder()) as update_proc:
-        update_proc.wait()
+    subprocess.run([python_path, 'update.py', latest_version, cwd], cwd=get_application_folder())
 
 
 def clear():
