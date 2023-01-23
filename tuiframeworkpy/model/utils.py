@@ -1,25 +1,32 @@
 import json
 import os
+import sys
+import subprocess
 
 from .colors import LIGHT_GREEN, LIGHT_RED, CYAN, WHITE
 
-from pathlib import Path
+import pathlib
 from types import SimpleNamespace
 
 
-def spawn_program_and_die(program, exit_code=0):
-    import subprocess
-    import sys
-    subprocess.Popen(program)
-    sys.exit(exit_code)
+def get_application_folder():
+    path = ''
+
+    home = pathlib.Path.home()
+
+    if sys.platform == "win32":
+        path = home / "AppData/Roaming"
+    elif sys.platform == "linux":
+        path = home / ".local/share"
+    elif sys.platform == "darwin":
+        path = home / "Library/Application Support"
+
+    return path / 'GCISGradingScripts'
 
 
-def autoupdate():
-    import sys
+def update(latest_version, cwd):
     python_path = sys.executable
-    if not python_path:
-        print(f'{LIGHT_RED}Unable to spawn update process. Please update manually{WHITE}')
-    spawn_program_and_die([python_path, './utils/update.py'])
+    subprocess.run([python_path, 'update.py', latest_version, cwd], cwd=get_application_folder())
 
 
 def clear():
@@ -62,22 +69,22 @@ def print_updates(current_version: str):
     repo = client.get_repo('NeonixRIT/GradingScripts')
     releases = repo.get_releases()
     print_release_changes_since_update(releases, current_version)
-    input('Press enter to continue...')
-    # res = bool_prompt('Do you wish to update now?', True)
-    # if res:
-    #     autoupdate()
+    # input('Press enter to continue...')
+    res = bool_prompt('Do you wish to update now?', True)
+    if res:
+        update()
 
 
 def make_new_config() -> SimpleNamespace:
     token = input('Github Authentication Token: ')
     organization = input('Organization Name: ')
     student_filename = input('Enter path of csv file containing username and name of students: ')
-    output_dir = Path(input('Output directory for assignment files (`enter` for current directory): '))
+    output_dir = pathlib.Path(input('Output directory for assignment files (`enter` for current directory): '))
     if not output_dir:
-        output_dir = Path.cwd()
-    while not Path.is_dir(output_dir):
+        output_dir = pathlib.Path.cwd()
+    while not pathlib.Path.is_dir(output_dir):
         print(f'Directory `{output_dir}` not found.')
-        output_dir = Path(input('Output directory for assignment files (`enter` for current directory): '))
+        output_dir = pathlib.Path(input('Output directory for assignment files (`enter` for current directory): '))
 
     values = {'token': token, 'organization': organization, 'students_csv': student_filename, 'out_dir': str(output_dir), 'presets': [], 'add_rollback': []}
     values_formatted = json.dumps(values, indent=4)

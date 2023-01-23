@@ -1,8 +1,9 @@
 import os
+import shutil
 
 from datetime import datetime
 
-from tuiframeworkpy import Dependency, ConfigEntry, TUI, find_option_by_prefix_text
+from tuiframeworkpy import Dependency, ConfigEntry, TUI, find_option_by_prefix_text, LIGHT_RED, WHITE
 
 from view import MainMenu, CloneMenu, PresetsMenu, ConfigMenu, SelectCSVMenu, AddMenu, CloneHistoryMenu
 
@@ -54,7 +55,28 @@ def students_accepted(self, number: int):
     self.send(f'ACCEPTED {month} {number}')
 
 
+def get_application_folder():
+    import pathlib
+    import sys
+
+    path = ''
+
+    home = pathlib.Path.home()
+
+    if sys.platform == "win32":
+        path = home / "AppData/Roaming"
+    elif sys.platform == "linux":
+        path = home / ".local/share"
+    elif sys.platform == "darwin":
+        path = home / "Library/Application Support"
+
+    return path / 'GCISGradingScripts'
+
+
 def main():
+    # Get application folder path
+    app_folder = get_application_folder()
+
     # Enable Color if using Windows
     if os.name == 'nt':
         import ctypes
@@ -75,7 +97,7 @@ def main():
     config_entries = [token_entry, org_entry, students_csv, out_dir_entry, presets, clone_history]
 
     # Define Default Folders
-    default_paths = ['./data', './data/csvs', './data/files_to_add']
+    default_paths = ['./data', './data/csvs', './data/files_to_add', str(app_folder)]
 
     # Create TUI
     metrics_proxy_methods = [repos_cloned, clone_time, files_added, add_time, students_accepted]
@@ -112,6 +134,11 @@ def main():
     find_option_by_prefix_text(clone_menu, 'Clone History').on_select += lambda: tui.open_menu(clone_history_menu.id)
     main_menu.options[4].on_select += lambda: tui.open_menu(config_menu.id)
     main_menu.options[2].on_select += lambda: tui.open_menu(add_menu.id)
+
+    # Copy update script to path
+    if (app_folder / 'update.py').exists():
+        os.remove(app_folder / 'update.py')
+    shutil.copy('./utils/update.py', app_folder / 'update.py')
 
     # Run TUI
     tui.start()
