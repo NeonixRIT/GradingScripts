@@ -111,3 +111,4 @@ class Menu:
             user_input = self.get_option()
             handle_option_return = self.handle_option(user_input)
         clear()
+        exit()
