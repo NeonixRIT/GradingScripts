@@ -93,6 +93,6 @@ class TUI:
             self.on_error()
             if not isinstance(e, KeyboardInterrupt):
                 print(f'\n{LIGHT_RED}FATAL: Unknown Error Occured.{WHITE}\n\n{CYAN}{e}{WHITE}\n')
-                if self.context.config_manager.config.debug:
+                if getattr(self.context.config_manager.config, 'debug', True):
                     raise e
             self.menus[0].quit()
