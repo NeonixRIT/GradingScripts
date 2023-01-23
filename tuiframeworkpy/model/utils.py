@@ -63,7 +63,7 @@ def bool_prompt(prompt: str, default_output: bool) -> bool:
     return default_output if not result else True if result.lower() == 'y' else False if result.lower() == 'n' else default_output
 
 
-def print_updates(current_version: str):
+def print_updates(current_version: str, tui_instance):
     from github import Github
     client = Github()
     repo = client.get_repo('NeonixRIT/GradingScripts')
@@ -73,6 +73,7 @@ def print_updates(current_version: str):
     res = bool_prompt('Do you wish to update now?', True)
     if res:
         update(list(releases)[0].tag_name, os.getcwd())
+        tui_instance.update_instance = True
 
 
 def make_new_config() -> SimpleNamespace:

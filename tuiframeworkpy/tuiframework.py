@@ -45,6 +45,8 @@ class TUI:
         self.menus: dict[int, Menu]
         self.menus = {}
 
+        self.update_instance = False
+
     def add_menu(self, menu: Menu) -> None:
         menu.context = self.context
         self.menus[menu.id] = menu
@@ -78,7 +80,7 @@ class TUI:
                 print(f'{LIGHT_RED}WARNING: Unable to check for update.{WHITE}')
             self.context.update_status = update_status
             if update_status == versionmanager.Status.OUTDATED:
-                print_updates(self.version)
+                print_updates(self.version, self)
             self.context.config_manager.initialize()
 
             if self.context.config_manager.config.metrics_api:
@@ -87,7 +89,9 @@ class TUI:
 
             for menu in self.menus:
                 self.menus[menu].load()
-            self.menus[0].open()
+
+            if not self.update_instance:
+                self.menus[0].open()
         except (ConnectionError, KeyboardInterrupt, Exception) as e:
             clear()
             self.on_error()
