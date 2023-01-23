@@ -1,3 +1,5 @@
+import sys
+
 from .colors import LIGHT_GREEN, LIGHT_RED, CYAN, WHITE
 from .context import Context
 from .event import Event
@@ -111,4 +113,4 @@ class Menu:
             user_input = self.get_option()
             handle_option_return = self.handle_option(user_input)
         clear()
-        exit()
+        sys.exit(0)
