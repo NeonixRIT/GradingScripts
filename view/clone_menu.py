@@ -91,6 +91,13 @@ class CloneMenu(SubMenu):
     def toggle_clone_via_tag(self):
         self.clone_via_tag = not self.clone_via_tag
 
+    def save_report(self, report):
+        clone_logs = self.context.config_manager.config.clone_history
+        clone_logs.append(report)
+        if len(clone_logs) > 8:
+            clone_logs = clone_logs[1:]
+        self.context.config_manager.set_config_value('clone_history', clone_logs)
+
     def clone_repos(self, preset: ClonePreset = None):
         students_path = self.context.config_manager.config.students_csv
         if preset is not None and self.loaded_csv != preset.csv_path:
@@ -191,7 +198,6 @@ class CloneMenu(SubMenu):
         self.outputs_log.append(end_report_str)
         extract_data_folder(parent_folder_path)
 
-        clone_logs = self.context.config_manager.config.clone_history
         report = CloneReport(
             assignment_name,
             due_date,
@@ -199,13 +205,11 @@ class CloneMenu(SubMenu):
             datetime.today().strftime('%Y-%m-%d'),
             datetime.now().strftime('%H:%M'),
             due_tag,
-            str(self.context.config_manager.config.students_csv),
+            str(students_path),
             tuple(self.outputs_log)
         )
-        clone_logs.append(report)
-        if len(clone_logs) > 8:
-            clone_logs = clone_logs[1:]
-        self.context.config_manager.set_config_value('clone_history', clone_logs)
+
+        threading.Thread(target=lambda: self.save_report(report)).start()
 
         self.filtered_repos.clear()
         self.no_commits_students.clear()
