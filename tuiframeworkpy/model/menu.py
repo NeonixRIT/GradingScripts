@@ -8,9 +8,9 @@ from .menu_option import MenuOption
 
 
 class Menu:
-    __slots__ = ['context', 'id', 'name', 'min_options', 'max_options', 'options', 'on_enter', 'on_exit', 'prompt_string', 'quit_string', 'invalid_input_string', 'disabled_option_string', 'legend']
+    __slots__ = ['context', 'id', 'name', 'min_options', 'max_options', 'options', 'on_enter', 'on_exit', 'prompt_string', 'quit_string', 'invalid_input_string', 'disabled_option_string', 'legend', 'preload']
 
-    def __init__(self, id: int, name: str, options: list[MenuOption], on_enter: Event = None, on_exit: Event = None, legend: str = ''):
+    def __init__(self, id: int, name: str, options: list[MenuOption], on_enter: Event = None, on_exit: Event = None, preload = True, legend: str = ''):
         self.context: Context
         self.name = name
         self.id = id
@@ -30,6 +30,7 @@ class Menu:
         self.on_enter = on_enter
         self.on_exit = on_exit
         self.legend = legend
+        self.preload = preload
 
         self.prompt_string = f'Please enter a number {LIGHT_GREEN}({self.min_options}-{self.max_options}){WHITE} or {LIGHT_RED}q/quit{WHITE} to quit the program: '
         self.quit_string = 'Closing...\nReturning to shell.\n\nHave a wonderful day!'

@@ -16,7 +16,7 @@ class AddMenu(SubMenu):
     __slots__ = ['repo_paths', 'read_files', 'repos_folder_path', 'repos_previous_commit_hash']
 
     def __init__(self, id):
-        SubMenu.__init__(self, id, 'Add Files', [], Event(), Event())
+        SubMenu.__init__(self, id, 'Add Files', [], Event(), Event(), preload=False)
 
     def load(self):
         pass

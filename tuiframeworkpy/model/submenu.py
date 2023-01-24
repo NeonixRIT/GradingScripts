@@ -7,8 +7,8 @@ from .utils import clear
 class SubMenu(Menu):
     __slots__ = ['parent', 'only_one_prompt']
 
-    def __init__(self, id: int, name: str, options: list, on_enter: Event, on_exit: Event, only_one_prompt: bool = False):
-        Menu.__init__(self, id, name, options, on_enter, on_exit)
+    def __init__(self, id: int, name: str, options: list, on_enter: Event, on_exit: Event, only_one_prompt: bool = False, preload: bool = True):
+        Menu.__init__(self, id, name, options, on_enter, on_exit, preload=preload)
         self.prompt_string = f'Please enter a number {LIGHT_GREEN}({self.min_options}-{self.max_options}){WHITE} or {LIGHT_RED}q/quit{WHITE} to return to the previous menu: '
         self.quit_string = ''
         self.invalid_input_string = f'You entered an invalid option.\n\nPlease enter a number between {self.min_options} and {self.max_options}.\nPress enter to try again.'

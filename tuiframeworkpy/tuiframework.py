@@ -91,7 +91,7 @@ class TUI:
                 self.context.metrics_client.initialize()
                 self.on_error += self.context.metrics_client.proxy.error_handled
 
-            for menu in self.menus:
+            for menu in filter(lambda x: self.menus[x].preload, self.menus):
                 self.menus[menu].load()
 
             self.menus[0].open()

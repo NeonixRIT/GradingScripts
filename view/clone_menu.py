@@ -68,7 +68,8 @@ class CloneMenu(SubMenu):
         clone_repos = MenuOption(4, 'Continue Without Preset', clone_repos_event, Event(), Event())
         self.local_options.append(clone_repos)
 
-        SubMenu.__init__(self, id, 'Clone Presets', self.preset_options + self.local_options, Event(), Event())
+        SubMenu.__init__(self, id, 'Clone Presets', self.preset_options + self.local_options, Event(), Event(), preload=False)
+        self.on_enter += self.load
 
     def load(self):
         self.client = self.parent.client

@@ -12,7 +12,7 @@ class CloneHistoryMenu(SubMenu):
         clear_history_options.on_exit += self.load
         self.local_option = [clear_history_options]
 
-        SubMenu.__init__(self, id, 'Clone History', self.local_option, Event(), Event())
+        SubMenu.__init__(self, id, 'Clone History', self.local_option, Event(), Event(), preload=False)
         assign_str = 'Assignment[:Tag]'.ljust(25)
         due_str = 'Due'.ljust(20)
         curr_str = 'Current'.ljust(20)
