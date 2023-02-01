@@ -136,6 +136,7 @@ class CloneMenu(SubMenu):
                     flags = (0, 1, 0)
                 elif res == 'ex':
                     flags = (0, 0, 1)
+                break
 
         repos_struct = ReposStruct()
         thread = threading.Thread(target=lambda: self.get_repos_specified_students(self.filtered_repos, assignment_name, due_tag, repos_struct))  # noqa: F821
