@@ -10,12 +10,13 @@ from typing import Iterable
 
 from .clone_preset import ClonePreset
 from .clone_report import CloneReport
+from .student_param import StudentParam
 
 from utils import get_color_from_bool, bool_prompt, run, list_to_multi_clone_presets
 from tuiframeworkpy import SubMenu, Event, MenuOption
 from tuiframeworkpy import LIGHT_RED, LIGHT_GREEN, CYAN, WHITE
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 
@@ -59,7 +60,7 @@ class CloneMenu(SubMenu):
         toggle_clone_tag = MenuOption(2, f'Clone Via Tag: {get_color_from_bool(self.clone_via_tag)}{self.clone_via_tag}{WHITE}', toggle_clone_tag_event, Event(), Event(), pause=False)
         self.local_options.append(toggle_clone_tag)
 
-        clone_history = MenuOption(3, f'Clone History', Event(), Event(), Event(), pause=False)
+        clone_history = MenuOption(3, 'Clone History', Event(), Event(), Event(), pause=False)
         clone_history.on_exit += self.load
         self.local_options.append(clone_history)
 
@@ -122,8 +123,22 @@ class CloneMenu(SubMenu):
             if preset.append_timestamp:
                 preset.folder_suffix += f'_{due_tag}'
 
+        flags = (0, 0, 0)  # (class activity, assignment, exam)
+        for param in self.context.config_manager.config.extra_student_parameters:
+            if param.github in self.students:
+                print(f'{LIGHT_GREEN}Student found in extra parameters.{WHITE}')
+                res = input(f'Is this for a {LIGHT_GREEN}class activity(ca){WHITE}, {LIGHT_GREEN}assignment(as){WHITE}, or {LIGHT_GREEN}exam(ex){WHITE}? ')
+                while res != 'ca' and res != 'as' and res != 'ex':
+                    res = input(f'Is this for a {LIGHT_GREEN}class activity(ca){WHITE}, {LIGHT_GREEN}assignment(as){WHITE}, or {LIGHT_GREEN}exam(ex){WHITE}? ')
+                if res == 'ca':
+                    flags = (1, 0, 0)
+                elif res == 'as':
+                    flags = (0, 1, 0)
+                elif res == 'ex':
+                    flags = (0, 0, 1)
+
         repos_struct = ReposStruct()
-        thread = threading.Thread(target=lambda: self.get_repos_specified_students(self.filtered_repos, assignment_name, due_tag, repos_struct))
+        thread = threading.Thread(target=lambda: self.get_repos_specified_students(self.filtered_repos, assignment_name, due_tag, repos_struct))  # noqa: F821
         thread.start()
 
         due_date = ''
@@ -189,7 +204,7 @@ class CloneMenu(SubMenu):
         if not self.clone_via_tag:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            loop.run_until_complete(self.rollback_all_repos(cloned_repos, due_date, preset.clone_time))
+            loop.run_until_complete(self.rollback_all_repos(cloned_repos, due_date, preset.clone_time, flags=flags))
         else:
             del cloned_repos
 
@@ -302,15 +317,39 @@ class CloneMenu(SubMenu):
             tasks.append(task)
         await asyncio.gather(*tasks)
 
-    async def rollback_all_repos(self, cloned_repos, date_due, time_due):
+    async def rollback_all_repos(self, cloned_repos, date_due, time_due, flags):
         tasks = []
+        is_ca = flags[0]
+        is_as = flags[1]
+        is_ex = flags[2]
         while not cloned_repos.empty():
             repo = await cloned_repos.get()
+            student_params = StudentParam('', '', 0, 0, 0)
+            for student in self.context.config_manager.config.extra_student_parameters:
+                if student.github in repo.old_name():
+                    student_params = student
+                    break
+
+            hours_adjust = 0
+            if is_ca:
+                hours_adjust = student_params.class_activity_adj
+            elif is_as:
+                hours_adjust = student_params.assignment_adj
+            elif is_ex:
+                hours_adjust = student_params.exam_adj
+
+            if hours_adjust > 0:
+                due_datetime = datetime.strptime(f'{date_due} {time_due}', '%Y-%m-%d %H:%M')
+                due_datetime += timedelta(hours=hours_adjust)
+                due_datetime_strip = due_datetime.strftime('%Y-%m-%d %H:%M').split(' ')
+                date_due = due_datetime_strip[0]
+                time_due = due_datetime_strip[1]
+
             commit_hash = await repo.get_commit_hash(date_due, time_due)
 
             if not commit_hash:
                 err_str = f'    > {CYAN}Commit hash failed for [{repo.old_name()}] {repo} retrying...{WHITE}'
-                res_str = f''
+                res_str = ''
                 print(err_str, end='')
                 time.sleep(0.3)
                 commit_hash = await repo.get_commit_hash(date_due, time_due)

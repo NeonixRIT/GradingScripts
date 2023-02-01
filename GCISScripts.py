@@ -5,9 +5,9 @@ from datetime import datetime
 
 from tuiframeworkpy import Dependency, ConfigEntry, TUI, find_option_by_prefix_text, LIGHT_RED, WHITE
 
-from view import MainMenu, CloneMenu, PresetsMenu, ConfigMenu, SelectCSVMenu, AddMenu, CloneHistoryMenu
+from view import MainMenu, CloneMenu, PresetsMenu, ConfigMenu, SelectCSVMenu, AddMenu, CloneHistoryMenu, StudentParamsMenu
 
-VERSION = '2.1.4'
+VERSION = '2.1.5'
 
 
 def verify_token_org(config) -> set:
@@ -32,6 +32,11 @@ def set_csv_values(context, entry, prompt_func):
 
     if student_csv_menu_quit:
         context.config_manager.set_config_value(entry.name, prompt_func())
+
+
+def set_student_params(context, entry, prompt_func):
+    student_param_menu = StudentParamsMenu(22, context)
+    student_param_menu.run()
 
 
 def repos_cloned(self, number: int):
@@ -94,7 +99,8 @@ def main():
     out_dir_entry = ConfigEntry('out_dir', 'Output Folder', '.', 'Output directory for assignment files (`enter` for current directory): ', prompt=True, is_path=True)
     presets = ConfigEntry('presets', 'Presets', [], None, prompt=False)
     clone_history = ConfigEntry('clone_history', 'Clone History', [], None, prompt=False)
-    config_entries = [token_entry, org_entry, students_csv, out_dir_entry, presets, clone_history]
+    student_params = ConfigEntry('extra_student_parameters', 'Extra Student Parameters', [], None, prompt=True)
+    config_entries = [token_entry, org_entry, students_csv, out_dir_entry, presets, clone_history, student_params]
 
     # Define Default Folders
     default_paths = ['./data', './data/csvs', './data/files_to_add', str(app_folder)]
@@ -124,7 +130,7 @@ def main():
     tui.add_submenu(add_menu, main_menu)
 
     # Define Edit Config Menu
-    custom_edit_fields = {'students_csv': set_csv_values}
+    custom_edit_fields = {'students_csv': set_csv_values, 'extra_student_parameters': set_student_params}
     config_menu = ConfigMenu(99, custom_edit_fields)
     tui.add_submenu(config_menu, main_menu)
 

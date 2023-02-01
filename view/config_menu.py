@@ -26,7 +26,10 @@ class ConfigMenu(SubMenu):
             on_select += lambda value_name=entry.name: self.edit_config_value(value_name)
             if entry.name == 'metrics_api':
                 on_select += self.context.main.update_metrics_client
-            text = f'{entry.friendly_name}: {get_color_from_bool(value)}{value}{WHITE}' if entry.is_bool_prompt else f'{entry.friendly_name}: {value}'
+            if isinstance(value, type(list())):
+                text = f'{entry.friendly_name}'
+            else:
+                text = f'{entry.friendly_name}: {get_color_from_bool(value)}{value}{WHITE}' if entry.is_bool_prompt else f'{entry.friendly_name}: {value}'
             option = MenuOption(i + 1, text, on_select, Event(), Event(), pause=False)
             option.on_select += self.load
             self.options[option.number] = option
