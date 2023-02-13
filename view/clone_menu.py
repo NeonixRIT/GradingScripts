@@ -123,20 +123,21 @@ class CloneMenu(SubMenu):
             if preset.append_timestamp:
                 preset.folder_suffix += f'_{due_tag}'
 
-        flags = (0, 0, 0)  # (class activity, assignment, exam)
-        for param in self.context.config_manager.config.extra_student_parameters:
-            if param.github in self.students:
-                print(f'{LIGHT_GREEN}Student found in extra parameters.{WHITE}')
-                res = input(f'Is this for a {LIGHT_GREEN}class activity(ca){WHITE}, {LIGHT_GREEN}assignment(as){WHITE}, or {LIGHT_GREEN}exam(ex){WHITE}? ')
-                while res != 'ca' and res != 'as' and res != 'ex':
+        flags = preset.clone_type  # (class activity, assignment, exam)
+        if preset.clone_type is None:
+            for param in self.context.config_manager.config.extra_student_parameters:
+                if param.github in self.students:
+                    print(f'{LIGHT_GREEN}Student found in extra parameters.{WHITE}')
                     res = input(f'Is this for a {LIGHT_GREEN}class activity(ca){WHITE}, {LIGHT_GREEN}assignment(as){WHITE}, or {LIGHT_GREEN}exam(ex){WHITE}? ')
-                if res == 'ca':
-                    flags = (1, 0, 0)
-                elif res == 'as':
-                    flags = (0, 1, 0)
-                elif res == 'ex':
-                    flags = (0, 0, 1)
-                break
+                    while res != 'ca' and res != 'as' and res != 'ex':
+                        res = input(f'Is this for a {LIGHT_GREEN}class activity(ca){WHITE}, {LIGHT_GREEN}assignment(as){WHITE}, or {LIGHT_GREEN}exam(ex){WHITE}? ')
+                    if res == 'ca':
+                        flags = (1, 0, 0)
+                    elif res == 'as':
+                        flags = (0, 1, 0)
+                    elif res == 'ex':
+                        flags = (0, 0, 1)
+                    break
 
         repos_struct = ReposStruct()
         thread = threading.Thread(target=lambda: self.get_repos_specified_students(self.filtered_repos, assignment_name, due_tag, repos_struct))  # noqa: F821

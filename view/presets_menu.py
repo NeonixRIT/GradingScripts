@@ -56,10 +56,21 @@ class PresetsMenu(SubMenu):
         csv_path = input(f'{prompt_prefix} desired csv file (enter for default): ')
         append_timestamp = bool_prompt('Would you like to append timestamp to the folder name?', False)
 
+        clone_type_flag = (0, 0, 0)
+        res = input(f'Is this for a {LIGHT_GREEN}class activity(ca){WHITE}, {LIGHT_GREEN}assignment(as){WHITE}, or {LIGHT_GREEN}exam(ex){WHITE}? ')
+        while res != 'ca' and res != 'as' and res != 'ex':
+            res = input(f'Is this for a {LIGHT_GREEN}class activity(ca){WHITE}, {LIGHT_GREEN}assignment(as){WHITE}, or {LIGHT_GREEN}exam(ex){WHITE}? ')
+        if res == 'ca':
+            clone_type_flag = (1, 0, 0)
+        elif res == 'as':
+            clone_type_flag = (0, 1, 0)
+        elif res == 'ex':
+            clone_type_flag = (0, 0, 1)
+
         if not csv_path:
             csv_path = self.context.config_manager.config.students_csv
 
-        self.context.config_manager.config.presets.append([name, folder_suffix, clone_time, csv_path, append_timestamp])
+        self.context.config_manager.config.presets.append([name, folder_suffix, clone_time, csv_path, append_timestamp, clone_type_flag])
         self.context.config_manager.save_config()
 
     def check_preset_names(self, name):

@@ -115,9 +115,9 @@ async def run(cmd: str, cwd=os.getcwd()) -> tuple[str | None, str | None]:
 
 
 def list_to_clone_preset(args: list) -> ClonePreset | None:
-    if len(args) != 5:
+    if len(args) != 6:
         return
-    return ClonePreset(args[0], args[1], args[2], args[3], args[4])
+    return ClonePreset(args[0], args[1], args[2], args[3], args[4], args[5])
 
 
 def list_to_multi_clone_presets(presets: list) -> list:
