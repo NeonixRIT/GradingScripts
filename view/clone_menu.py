@@ -340,14 +340,19 @@ class CloneMenu(SubMenu):
             elif is_ex:
                 hours_adjust = student_params.exam_adj
 
+            date_due_tmp = None
+            time_due_tmp = None
             if hours_adjust > 0:
                 due_datetime = datetime.strptime(f'{date_due} {time_due}', '%Y-%m-%d %H:%M')
                 due_datetime += timedelta(hours=hours_adjust)
                 due_datetime_strip = due_datetime.strftime('%Y-%m-%d %H:%M').split(' ')
-                date_due = due_datetime_strip[0]
-                time_due = due_datetime_strip[1]
+                date_due_tmp = due_datetime_strip[0]
+                time_due_tmp = due_datetime_strip[1]
+            else:
+                date_due_tmp = date_due
+                time_due_tmp = time_due
 
-            commit_hash = await repo.get_commit_hash(date_due, time_due)
+            commit_hash = await repo.get_commit_hash(date_due_tmp, time_due_tmp)
 
             if not commit_hash:
                 err_str = f'    > {CYAN}Commit hash failed for [{repo.old_name()}] {repo} retrying...{WHITE}'
