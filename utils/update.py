@@ -6,6 +6,11 @@ import zipfile
 
 from pathlib import Path
 
+LIGHT_GREEN = '\033[1;32m'
+LIGHT_RED = '\033[1;31m'
+CYAN = '\u001b[36m'
+WHITE = '\033[0m'
+
 update_with_git = False
 update_with_download = False
 
@@ -61,7 +66,9 @@ if update_with_git:
         subprocess.run(['git', 'fetch', 'origin'], cwd=sys.argv[2], stdout=subprocess.PIPE, stdin=subprocess.PIPE)
         subprocess.run(['git', 'reset', '--hard', version], cwd=sys.argv[2], stdout=subprocess.PIPE, stdin=subprocess.PIPE)
     except Exception as e:
+        print(f'{LIGHT_RED}FATAL: Exception occured while trying to update:{WHITE}\n\t{e}')
         print('Unable to complete auto update.')
+        input('Press enter to exit...')
         exit()
 elif update_with_download:
     download_and_update(f'./GCISGradingScript-temp-{sys.argv[1]}.zip')

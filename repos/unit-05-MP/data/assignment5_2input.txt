@@ -1,0 +1,16 @@
+
+help
+quit
+n
+stu
+stu data/grades_010.csv Notareal Student
+stu data/grades_010.csv Alainna Forshey
+stu data/foo.csv John Doe
+cavg
+cavg data/grades_010.csv
+avg
+avg data/grades_363.csv foo
+avg data/grades_363.csv 12
+avg data/grades_fake.csv 12
+quit
+y

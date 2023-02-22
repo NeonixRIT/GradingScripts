@@ -1,0 +1,35 @@
+python .\plots_cli.py                                                                          >>
+Enter a command or 'quit' to quit.
+>> help
+  stu <filename> <first name> <last name> - plot student grades
+  cavg <filename> - plot class average
+  avg <filename> <number> - prints the average for the grade item
+  quit - quits
+  help - displays this message
+>> quit
+Are you sure (y/n): n
+>> stu
+Usage: stu <filename> <first> <last>
+>> stu data/grades_010.csv Notareal Student
+Plot failed (no such student).
+>> stu data/grades_010.csv Alainna Forshey
+Plot finished (window may be hidden).
+>> stu data/foo.csv John Doe
+No such file: data/foo.csv
+>> cavg
+Usage: cavg <filename>
+>> cavg data/foo.csv
+No such file: data/foo.csv
+>> cavg data/grades_010.csv
+Plot finished (window may be hidden).
+>> avg
+Usage: avg <filename> <grade item>
+>> avg data/grades_363.csv foo
+Grade item must be a number.
+>> avg data/grades_363.csv 12
+Average: 79.7524861878453
+>> avg data/grades_fake.csv 12
+No such file: data/grades_fake.csv
+>> quit
+Are you sure (y/n): y
+Goodbye!
