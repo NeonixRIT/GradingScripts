@@ -110,7 +110,7 @@ class CloneMenu(SubMenu):
             self.students = get_students(students_path)
             self.loaded_csv = students_path
         if preset is None:
-            preset = ClonePreset('', '', '', students_path, False)
+            preset = ClonePreset('', '', '', students_path, False, (0, 0, 0))
             preset.append_timestamp = bool_prompt('Append timestamp to repo folder name?\nIf using a tag name, it will append the tag instead', True)
 
         assignment_name = attempt_get_assignment()  # prompt assignment name
