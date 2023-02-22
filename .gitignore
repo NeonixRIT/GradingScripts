@@ -13,3 +13,4 @@ data/logs.log
 .idea
 .fleet
 /venv
+/repos/*
