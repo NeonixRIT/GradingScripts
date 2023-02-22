@@ -22,6 +22,14 @@ def verify_token_org(config) -> set:
     return invalid_fields
 
 
+def verify_presets(config) -> set:
+    invalid_fields = set()
+    for preset in config.presets:
+        if not isinstance(preset[-1], list) and len(preset) != 6:
+            preset.append([0, 0, 0])
+    return invalid_fields
+
+
 def set_csv_values(context, entry, prompt_func):
     if len(os.listdir('./data/csvs/')) == 0:
         context.config_manager.set_config_value(entry.name, prompt_func())
@@ -111,6 +119,7 @@ def main():
 
     # Add Custom Verify Methods
     tui.context.config_manager += verify_token_org
+    tui.context.config_manager += verify_presets
 
     # Define Main Menu
     main_menu = MainMenu(0, VERSION)
