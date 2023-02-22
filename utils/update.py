@@ -57,8 +57,9 @@ def download_and_update(save_path):
 
 if update_with_git:
     try:
+        version = sys.argv[1]
         subprocess.run(['git', 'fetch', 'origin'], cwd=sys.argv[2], stdout=subprocess.PIPE, stdin=subprocess.PIPE)
-        subprocess.run(['git', 'reset', '--hard', 'origin/master'], cwd=sys.argv[2], stdout=subprocess.PIPE, stdin=subprocess.PIPE)
+        subprocess.run(['git', 'reset', '--hard', version], cwd=sys.argv[2], stdout=subprocess.PIPE, stdin=subprocess.PIPE)
     except Exception as e:
         print('Unable to complete auto update.')
         exit()
