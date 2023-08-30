@@ -88,6 +88,7 @@ class CloneMenu(SubMenu):
         for menu_option in options:
             self.options[menu_option.number] = menu_option
         self.max_options = len(options)
+        self.invalid_input_string = f'You entered an invalid option.\n\nPlease enter a number between {self.min_options} and {self.max_options}.\nPress enter to try again.'
         self.prompt_string = self.prompt_string = f'Please enter a number {LIGHT_GREEN}({self.min_options}-{self.max_options}){WHITE} or {LIGHT_RED}q/quit{WHITE} to return to the previous menu: '
 
     def toggle_clone_via_tag(self):

@@ -27,6 +27,7 @@ class SelectCSVMenu(SubMenu):
 
         SubMenu.__init__(self, id, 'Select New CSV File', options, Event(), Event(), only_one_prompt=True)
         self.prompt_string = f'Please enter a number {LIGHT_GREEN}({self.min_options}-{self.max_options}){WHITE} or {LIGHT_RED}q/quit{WHITE} to enter the value manually: '
+        self.invalid_input_string = f'You entered an invalid option.\n\nPlease enter a number between {self.min_options} and {self.max_options}.\nPress enter to try again.'
 
     def __set_config_value(self, value_name, new_value):
         clear()

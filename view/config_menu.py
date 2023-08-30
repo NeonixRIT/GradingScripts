@@ -37,6 +37,7 @@ class ConfigMenu(SubMenu):
         self.min_options = 1
         self.max_options = max(self.options.keys())
         self.prompt_string = f'Please enter a number {LIGHT_GREEN}({self.min_options}-{self.max_options}){WHITE} or {LIGHT_RED}q/quit{WHITE} to enter the value manually: '
+        self.invalid_input_string = f'You entered an invalid option.\n\nPlease enter a number between {self.min_options} and {self.max_options}.\nPress enter to try again.'
 
     def edit_config_value(self, value_name: str):
         clear()

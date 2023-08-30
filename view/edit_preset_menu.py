@@ -75,6 +75,7 @@ class EditPresetMenu(SubMenu):
                 option.text = f'Students CSV: {self.preset[i]}'
             elif option.text.startswith('Append Time'):
                 option.text = f'Append Time: {self.preset[i]}'
+        self.invalid_input_string = f'You entered an invalid option.\n\nPlease enter a number between {self.min_options} and {self.max_options}.\nPress enter to try again.'
 
 
     def run(self):
