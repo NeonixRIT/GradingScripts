@@ -500,7 +500,7 @@ def get_students(student_filename: str) -> dict:
             csv_reader = csv.reader(f_handle)  # Use csv reader to separate values into a list
             next(csv_reader)  # skip header line
             for student in csv_reader:
-                name = re.sub(r'([.]\s?|[,]\s?|\s)', '-', student[0]).rstrip(r'-')
+                name = re.sub(r'([.]\s?|[,]\s?|\s)', '-', student[0]).replace("'", '-').rstrip(r'-')
                 github = student[1]
                 if name and github: # if csv contains student name and github username, map them to each other
                     students[github] = name
