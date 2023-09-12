@@ -1,7 +1,6 @@
 import json
 import os
 import sys
-import subprocess
 
 from .colors import LIGHT_GREEN, LIGHT_RED, CYAN, WHITE
 
@@ -26,7 +25,7 @@ def get_application_folder():
 
 def update(latest_version, cwd):
     python_path = sys.executable
-    subprocess.run([python_path, 'update.py', latest_version, cwd], cwd=get_application_folder())
+    os.execl(python_path, python_path, get_application_folder() / 'update.py', latest_version, cwd)
 
 
 def clear():
