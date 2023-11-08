@@ -1,6 +1,5 @@
 import asyncio
 import csv
-import json
 import os
 import re
 import requests
@@ -11,7 +10,7 @@ from .clone_report import CloneReport
 from .student_param import StudentParam
 
 from utils import bool_prompt, run
-from tuiframeworkpy import LIGHT_RED, LIGHT_GREEN, CYAN, WHITE
+from tuiframeworkpy import LIGHT_RED, LIGHT_GREEN, WHITE
 
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -83,6 +82,7 @@ def check_date(date_inp: str):
         return False
     return True
 
+
 class GitHubAPIClient:
     def __init__(self, context, auth_token: str, organization: str) -> None:
         self.__organization = organization
@@ -131,7 +131,7 @@ class GitHubAPIClient:
             raise ConnectionError('Connection timed out.')
         return True, response.status_code
 
-    async def assignemnt_exists(self, assignment_name: str) -> bool:
+    async def assignment_exists(self, assignment_name: str) -> bool:
         '''
         Check if assignment exists
         '''
@@ -144,7 +144,7 @@ class GitHubAPIClient:
         response = await self.__async_request(url, params)
         if response.status_code != 200:
             return False
-        repo_json = json.loads(response.text, object_hook=lambda d: SimpleNamespace(**d))
+        repo_json = response.json(object_hook=lambda d: SimpleNamespace(**d))
         if getattr(repo_json, 'total_count', 0) == 0:
             return False
         return True, repo_json.total_count
@@ -199,7 +199,7 @@ class GitHubAPIClient:
         response = await self.__async_request(repo.commits_url[:-6], params)
         if response.status_code != 200:
             return None, None
-        commit_json = json.loads(response.text, object_hook=lambda d: SimpleNamespace(**d))
+        commit_json = response.json(object_hook=lambda d: SimpleNamespace(**d))
         if not commit_json:
             return None, None
         commit_hash = getattr(commit_json[0], 'sha', None)
@@ -212,7 +212,7 @@ class GitHubAPIClient:
         response = requests.get(url, headers=self.headers)
         if response.status_code != 200:
             return False
-        return json.loads(response.text, object_hook=lambda d: SimpleNamespace(**d)).items
+        return response.json(object_hook=lambda d: SimpleNamespace(**d)).items
 
     async def __add_valid_repos(self, assignment_name: str, due_date: str, due_time: str, repos: list):
         for repo in repos:
@@ -274,7 +274,7 @@ class GitHubAPIClient:
         if 'link' in response.headers:
             page_limit = get_page_by_rel(response.headers['link'], 'last')
 
-        repos = json.loads(response.text, object_hook=lambda d: SimpleNamespace(**d)).items
+        repos = response.json(object_hook=lambda d: SimpleNamespace(**d)).items
         await self.__add_valid_repos(assignment_name, due_date, due_time, repos)
         for page in range(2, page_limit + 1):
             repos = await self.__poll_repos_page(params, page)
@@ -363,7 +363,7 @@ class GitHubAPIClient:
         assignment_name = input('Assignment Name: ')  # get assignment name (repo prefix)
         while not assignment_name:  # if input is empty ask again
             assignment_name = input('Please input an assignment name: ')
-            if not await self.assignemnt_exists(assignment_name):
+            if not await self.assignment_exists(assignment_name):
                 print(f'Assignment `{assignment_name}` not found. Please try again.')
                 assignment_name = ''
         return assignment_name
