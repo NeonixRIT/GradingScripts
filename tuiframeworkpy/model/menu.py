@@ -10,7 +10,7 @@ from .menu_option import MenuOption
 class Menu:
     __slots__ = ['context', 'id', 'name', 'min_options', 'max_options', 'options', 'on_enter', 'on_exit', 'prompt_string', 'quit_string', 'invalid_input_string', 'disabled_option_string', 'legend', 'preload']
 
-    def __init__(self, id: int, name: str, options: list[MenuOption], on_enter: Event = None, on_exit: Event = None, preload = True, legend: str = ''):
+    def __init__(self, id: int, name: str, options: list[MenuOption], on_enter: Event = None, on_exit: Event = None, preload: bool = True, legend: str = ''):
         self.context: Context
         self.name = name
         self.id = id

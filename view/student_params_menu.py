@@ -1,5 +1,5 @@
 from .student_param import StudentParam
-from .clone_menu import get_students
+from .github_client import get_students
 
 from tuiframeworkpy import SubMenu, Event, MenuOption, LIGHT_GREEN, LIGHT_RED, CYAN, WHITE
 from utils import clear

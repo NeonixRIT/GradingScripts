@@ -19,7 +19,7 @@ class DependencyManager:
                 if not installed or not correct_version:
                     print(f'{LIGHT_RED}WARNING: Dependency {dependency.package} is not installed or is not the correct version. Attempting to install...{WHITE}')
                     dependency.install(correct_version)
-        except IndependentDependencyError as ide:
+        except IndependentDependencyError:
             # print(ide.message)
             print(f'{LIGHT_RED}FATAL: A Dependency ')
             exit(1)

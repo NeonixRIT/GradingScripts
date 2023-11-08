@@ -24,8 +24,6 @@ class ConfigMenu(SubMenu):
                 value = censor_string(value)
             on_select = Event()
             on_select += lambda value_name=entry.name: self.edit_config_value(value_name)
-            if entry.name == 'metrics_api':
-                on_select += self.context.main.update_metrics_client
             if isinstance(value, type(list())):
                 text = f'{entry.friendly_name}'
             else:

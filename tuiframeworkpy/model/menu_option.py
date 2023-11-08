@@ -25,6 +25,8 @@ class MenuOption:
 
 
     def __call__(self) -> list:
+        if not self.enabled:
+            return
         self.on_enter()
         self.on_select()
         self.on_exit()

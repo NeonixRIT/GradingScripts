@@ -2,7 +2,6 @@ from pathlib import Path
 
 from .dependencymanagerpy import DependencyManager, Dependency
 from .jsonconfigmanagerpy import ConfigManager, ConfigEntry
-from .metricsclientpy import MetricsClient
 
 from .model.colors import CYAN, LIGHT_RED, WHITE
 from .model.context import Context
@@ -15,7 +14,7 @@ from .model.utils import print_updates, clear
 
 
 class TUI:
-    def __init__(self, version, dependencies: list[Dependency], config_path: str, config_entries: list[ConfigEntry], metrics_addr: str, metrics_port: int, proxy_methods: list, metrics_encrypt: bool, default_paths: list[str]) -> None:
+    def __init__(self, version, dependencies: list[Dependency], config_path: str, config_entries: list[ConfigEntry], default_paths: list[str]) -> None:
         self.version = version
 
         for directory in default_paths:
@@ -28,15 +27,7 @@ class TUI:
         metrics_entry = ConfigEntry('metrics_api', 'Metrics API', True, 'Would you like to contribute to Metrics data?', prompt=True, is_bool_prompt=True)
         conf_man = ConfigManager(config_path, config_entries + [debug_entry, metrics_entry])
 
-        metrics_client = MetricsClient(metrics_addr, metrics_port, proxy_methods, metrics_encrypt)
-        self.__metrics_addr = metrics_addr
-        self.__metrics_port = metrics_port
-        self.__proxy_methods = proxy_methods
-        self.__metrics_encrypt = metrics_encrypt
-        if not metrics_addr or not metrics_port:
-            metrics_client = None
-
-        self.context = Context(conf_man, depends_man, metrics_client, self)
+        self.context = Context(conf_man, depends_man, self)
 
         self.on_error = Event()
         self.on_quit = Event()
@@ -59,13 +50,6 @@ class TUI:
     def open_menu(self, menu_id: int):
         self.menus[menu_id].open()
 
-    def update_metrics_client(self):
-        if self.context.config_manager.config.metrics_api:
-            self.context.metrics_client = MetricsClient(self.__metrics_addr, self.__metrics_port, self.__proxy_methods, self.__metrics_encrypt)
-            self.context.metrics_client.initialize()
-        else:
-            self.context.metrics_client = None
-
     def start(self) -> None:
         try:
             self.on_start()
@@ -86,10 +70,6 @@ class TUI:
                 exit()
 
             self.context.config_manager.initialize()
-
-            if self.context.config_manager.config.metrics_api:
-                self.context.metrics_client.initialize()
-                self.on_error += self.context.metrics_client.proxy.error_handled
 
             for menu in filter(lambda x: self.menus[x].preload, self.menus):
                 self.menus[menu].load()

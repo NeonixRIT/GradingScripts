@@ -30,7 +30,7 @@ class AddMenu(SubMenu):
         while not Path(self.repos_folder_path).exists():
             self.repos_folder_path = input(f'{LIGHT_RED}Path entered does not exist{WHITE}\nEnter path to cloned repos: ')
 
-        start = time.perf_counter()
+        # start = time.perf_counter()
         for root, folders, _ in walklevel(self.repos_folder_path):
             if '.git' in folders:
                 self.repo_paths.append(root)
@@ -48,10 +48,7 @@ class AddMenu(SubMenu):
         loop1.run_until_complete(self.do_all_git_workflow())
 
         print(f'{LIGHT_GREEN}Done.{WHITE}')
-        stop = time.perf_counter()
-
-        if self.context.config_manager.config.metrics_api:
-            self.context.metrics_client.proxy.add_time(stop - start)
+        # stop = time.perf_counter()
 
     async def read_file_to_mem(self, file_path):
         content = None
@@ -82,13 +79,9 @@ class AddMenu(SubMenu):
                 pass
         elif final_path.endswith('.zip'):
             shutil.copyfile(info[0], final_path)
-            if self.context.config_manager.config.metrics_api:
-                self.context.metrics_client.proxy.files_added(1)
         else:
             with open(final_path, 'w') as f:
                 f.write(content.decode())
-                if self.context.config_manager.config.metrics_api:
-                    self.context.metrics_client.proxy.files_added(1)
 
     async def write_to_repos(self):
         tasks = []

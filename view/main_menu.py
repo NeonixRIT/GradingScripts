@@ -3,13 +3,13 @@ from utils import get_color_from_status
 from tuiframeworkpy import Menu, Event, MenuOption
 from tuiframeworkpy import LIGHT_GREEN, LIGHT_RED, WHITE
 
-from .clone_menu import get_students
+from .github_client import GitHubAPIClient
 
 MAX_THREADS = 200
 
 
 class MainMenu(Menu):
-    __slots__ = ['client', 'repos', 'students', '__version']
+    __slots__ = ['client', '__version']
 
     def __init__(self, id, version):
         clone_repos = MenuOption(1, 'Clone Repos', Event(), Event(), Event(), pause=False)
@@ -21,22 +21,20 @@ class MainMenu(Menu):
         Menu.__init__(self, id, f'GCIS Grading Scripts {LIGHT_GREEN}v{version}{WHITE}', options)
 
         self.client = None
-        self.repos = None
-        self.students = None
 
         self.__version = version
 
     def load(self):
-        from github import Github
         self.name = f'GCIS Grading Scripts {get_color_from_status(self.context.update_status)}v{self.__version}{WHITE}'
         try:
-            self.client = Github(self.context.config_manager.config.token, pool_size=MAX_THREADS).get_organization(self.context.config_manager.config.organization)
-        except ConnectionError:
-            print(f'{LIGHT_RED}FATAL: Unable to contact GitHub.{WHITE}')
-            raise ConnectionError
-        self.repos = self.client.get_repos()
-        self.students = get_students(self.context.config_manager.config.students_csv)
-        self.on_enter += self.__update_students
-
-    def __update_students(self):
-        self.students = get_students(self.context.config_manager.config.students_csv)
+            self.client = GitHubAPIClient(self.context, self.context.config_manager.config.token, self.context.config_manager.config.organization)
+            authorized, resp_code = self.client.is_authorized()
+            if not authorized:
+                print(f'{LIGHT_RED}FATAL: GitHub API Authorization failed. Make sure your token is valid and has the correct permissions.\nResponse Code: {resp_code}{WHITE}')
+                raise ValueError(f'GitHub API Authorization failed. Make sure your token is valid and has the correct permissions.\nResponse Code: {resp_code}')
+            if resp_code != 200:
+                print(f'{LIGHT_RED}FATAL: GitHub API returned an unexpected response code. Perhaphs try again later.\nResponse Code: {resp_code}{WHITE}')
+                raise ValueError(f'GitHub API returned an unexpected response code. Perhaphs try again later.\nResponse Code: {resp_code}')
+        except ConnectionError as e:
+            print(f'{LIGHT_RED}FATAL: Unable to contact GitHub API.{WHITE}')
+            raise e

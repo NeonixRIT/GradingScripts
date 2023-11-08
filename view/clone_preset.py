@@ -14,7 +14,7 @@ class ClonePreset:
         return f'ClonePreset(folder_suffix: {self.folder_suffix}, clone_time: {self.clone_time}, name: {self.name}, csv_path: {self.csv_path}, append_timestamp: {self.append_timestamp})'
 
     def __eq__(self, other) -> bool:
-        if type(other) != ClonePreset:
+        if not isinstance(other, ClonePreset):
             return False
 
         return repr(self) == repr(other)

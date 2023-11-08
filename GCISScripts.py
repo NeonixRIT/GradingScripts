@@ -1,24 +1,27 @@
 import os
 import shutil
 
-from datetime import datetime
-
 from tuiframeworkpy import Dependency, ConfigEntry, TUI, find_option_by_prefix_text, LIGHT_RED, WHITE
 
-from view import MainMenu, CloneMenu, PresetsMenu, ConfigMenu, SelectCSVMenu, AddMenu, CloneHistoryMenu, StudentParamsMenu
+from view import MainMenu, CloneMenu, PresetsMenu, ConfigMenu, SelectCSVMenu, AddMenu, CloneHistoryMenu, StudentParamsMenu, GitHubAPIClient
 
-VERSION = '2.1.7'
+VERSION = '2.2.0'
 
 
 def verify_token_org(config) -> set:
     invalid_fields = set()
-    from github import Github, BadCredentialsException, UnknownObjectException
     try:
-        Github(config.token).get_organization(config.organization)
-    except BadCredentialsException:
-        invalid_fields.add('token')
-    except UnknownObjectException:
-        invalid_fields.add('organization')
+        tmp_client = GitHubAPIClient(None, config.token, config.organization)
+        authorized, resp_code = tmp_client.is_authorized()
+        if resp_code == 200 and authorized:
+            return invalid_fields
+        elif resp_code == 401:
+            invalid_fields.add('token')
+        elif resp_code == 404:
+            invalid_fields.add('organization')
+    except ConnectionError as e:
+        print(f'{LIGHT_RED}FATAL: Unable to contact GitHub API.{WHITE}')
+        raise e
     return invalid_fields
 
 
@@ -45,27 +48,6 @@ def set_csv_values(context, entry, prompt_func):
 def set_student_params(context, entry, prompt_func):
     student_param_menu = StudentParamsMenu(22, context)
     student_param_menu.run()
-
-
-def repos_cloned(self, number: int):
-    self.send(f'CLONED {number}')
-
-
-def clone_time(self, seconds: float):
-    self.send(f'CLONETIME {seconds}')
-
-
-def files_added(self, number: int):
-    self.send(f'ADD {number}')
-
-
-def add_time(self, seconds: float):
-    self.send(f'ADDTIME {seconds}')
-
-
-def students_accepted(self, number: int):
-    month = datetime.now().strftime("%B").lower()
-    self.send(f'ACCEPTED {month} {number}')
 
 
 def get_application_folder():
@@ -97,7 +79,6 @@ def main():
         kernel32.SetConsoleMode(kernel32.GetStdHandle(-11), 7)
 
     # Define Dependencies
-    pygithub = Dependency('pygithub', '1.50', 'pip', version_regex=r'(\d+\.\d+)')
     git = Dependency('git', '2.30', '')
 
     # Define Config Entries
@@ -114,8 +95,7 @@ def main():
     default_paths = ['./data', './data/csvs', './data/files_to_add', str(app_folder)]
 
     # Create TUI
-    metrics_proxy_methods = [repos_cloned, clone_time, files_added, add_time, students_accepted]
-    tui = TUI(VERSION, [pygithub, git], 'data/config.json', config_entries, 'www.neonix.me', 13370, metrics_proxy_methods, False, default_paths)
+    tui = TUI(VERSION, [git], 'data/config.json', config_entries, default_paths)
 
     # Add Custom Verify Methods
     tui.context.config_manager += verify_token_org
