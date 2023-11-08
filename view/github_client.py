@@ -362,11 +362,12 @@ class GitHubAPIClient:
         Get assignment name from input. Does not accept empty input.
         '''
         assignment_name = input('Assignment Name: ')  # get assignment name (repo prefix)
-        while not assignment_name:  # if input is empty ask again
-            assignment_name = input('Please input an assignment name: ')
-            if not await self.assignment_exists(assignment_name):
+        assignment_exists = await self.assignment_exists(assignment_name)
+        while not assignment_name or not assignment_exists:  # if input is empty ask again
+            if not assignment_exists:
                 print(f'Assignment `{assignment_name}` not found. Please try again.')
-                assignment_name = ''
+            assignment_name = input('Please input an assignment name: ')
+            assignment_exists = await self.assignment_exists(assignment_name)
         return assignment_name
 
     async def save_report(self, report):
@@ -385,6 +386,7 @@ class GitHubAPIClient:
             self.print_and_log(f'{LIGHT_GREEN}Data folder extracted to the output directory.{WHITE}', assignment_name)
 
     async def run(self, preset: ClonePreset = None):
+        students_start = perf_counter()
         students_path = self.context.config_manager.config.students_csv
         if self.loaded_csv is None or self.students is None:
             self.students = get_students(students_path)
@@ -395,6 +397,8 @@ class GitHubAPIClient:
         if self.loaded_csv != preset.csv_path:
             self.students = get_students(preset.csv_path)
             self.loaded_csv = preset.csv_path
+        students_stop = perf_counter()
+        students_time = students_stop - students_start
 
         assignment_name = await self.attempt_get_assignment()  # prompt and verify assignment name
 
@@ -438,7 +442,7 @@ class GitHubAPIClient:
             preset.folder_suffix += f'_{date_str}_{time_str}'
         # end if
 
-        start = perf_counter()
+        pull_start_1 = perf_counter()
         i = 0
         parent_folder_path = f'{self.context.config_manager.config.out_dir}/{assignment_name}{preset.folder_suffix}'  # prompt parent folder (IE assingment_name-AS in config.out_dir)
         while Path(parent_folder_path).exists():
@@ -446,22 +450,41 @@ class GitHubAPIClient:
             parent_folder_path = f'{self.context.config_manager.config.out_dir}/{assignment_name}{preset.folder_suffix}_iter_{i}'
 
         os.mkdir(parent_folder_path)
+        pull_stop_1 = perf_counter()
 
-        repos = await self.get_repos(assignment_name, due_date, preset.clone_time, refresh=True)  # get repos for assignment
-        if len(repos) == 0:
-            err = 'No repos found for specified students.'
-            self.print_and_log(err, assignment_name, LIGHT_RED)
-            return
+        while True:
+            pull_start_2 = perf_counter()
+            repos = await self.get_repos(assignment_name, due_date, preset.clone_time, refresh=True)  # get repos for assignment
+            pull_stop_2 = perf_counter()
+            if len(repos) > 0:
+                break
+            print(f'{LIGHT_RED}No repos found for specified students and assignment `{assignment_name}`.{WHITE}')
+            print('Please try again or type `quit()` to return to the clone menu.')
+            tmp_flags = self.assignment_flags[assignment_name]
+            del self.assignment_flags[assignment_name]
+            del self.assignment_repos[assignment_name]
+            del self.assignment_students_accepted[assignment_name]
+            del self.assignment_students_not_accepted[assignment_name]
+            del self.assignment_students_no_commit[assignment_name]
+            del self.assignment_output_log[assignment_name]
+            assignment_name = await self.attempt_get_assignment()
+            if assignment_name == 'quit()':
+                return
+            self.assignment_flags[assignment_name] = tmp_flags
 
         print()
 
+        pull_start_3 = perf_counter()
         outdir = parent_folder_path[len(self.context.config_manager.config.out_dir) + 1:]
         outdir_str = f'Output directory: {outdir}'
         self.print_and_log(outdir_str, assignment_name)
         await self.pull_assignment_repos(assignment_name, parent_folder_path)
         await self.extract_data_folder(assignment_name, parent_folder_path)
-        end = perf_counter()
-        end_report_str = self.print_pull_report(assignment_name, end - start)
+        pull_stop_3 = perf_counter()
+        pull_time = (pull_stop_3 - pull_start_3) + (pull_stop_2 - pull_start_2) + (pull_stop_1 - pull_start_1)
+
+        ellapsed_time = pull_time + students_time
+        end_report_str = self.print_pull_report(assignment_name, ellapsed_time)
         self.assignment_output_log[assignment_name].append(end_report_str)
 
         report = CloneReport(
