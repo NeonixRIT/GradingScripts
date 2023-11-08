@@ -78,7 +78,8 @@ def main():
         kernel32 = ctypes.windll.kernel32
         kernel32.SetConsoleMode(kernel32.GetStdHandle(-11), 7)
 
-    # Define Dependencies
+        # Define Dependencies
+    pygithub = Dependency('pygithub', '1.50', 'pip', version_regex=r'(\d+\.\d+)')
     git = Dependency('git', '2.30', '')
     requests = Dependency('requests', '2.31.0', 'pip')
 
@@ -96,7 +97,7 @@ def main():
     default_paths = ['./data', './data/csvs', './data/files_to_add', str(app_folder)]
 
     # Create TUI
-    tui = TUI(VERSION, [git, requests], 'data/config.json', config_entries, default_paths)
+    tui = TUI(VERSION, [pygithub, git, requests], 'data/config.json', config_entries, default_paths)
 
     # Add Custom Verify Methods
     tui.context.config_manager += verify_token_org

@@ -2,7 +2,6 @@ import asyncio
 import csv
 import os
 import re
-import requests
 import shutil
 
 from .clone_preset import ClonePreset
@@ -121,6 +120,7 @@ class GitHubAPIClient:
         '''
         Check if auth token is valid
         '''
+        import requests
         org_url = f'https://api.github.com/orgs/{self.__organization}'
         try:
             response = requests.get(org_url, headers=self.headers, timeout=10)
@@ -154,6 +154,7 @@ class GitHubAPIClient:
         self.assignment_output_log[assignment_name].append(message)
 
     async def __async_request(self, url: str, params: dict = None):
+        import requests
         return requests.get(f'{url}?{urlencode(params)}', headers=self.headers)
 
     def __get_adjusted_due_datetime(self, repo, due_date: str, due_time: str) -> tuple:
@@ -209,7 +210,7 @@ class GitHubAPIClient:
     async def __poll_repos_page(self, params: str, page: int):
         params['page'] = page
         url = f'https://api.github.com/search/repositories?{urlencode(params)}'
-        response = requests.get(url, headers=self.headers)
+        response = await self.__async_request(url, params)
         if response.status_code != 200:
             return False
         return response.json(object_hook=lambda d: SimpleNamespace(**d)).items
