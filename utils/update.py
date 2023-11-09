@@ -1,7 +1,6 @@
 import subprocess
 import os
 import sys
-import requests
 import zipfile
 
 from pathlib import Path
@@ -30,6 +29,7 @@ def onerror(func, path, exc_info):
 
 
 def download_and_update(save_path):
+    import requests
     version = sys.argv[1]
     script_location = sys.argv[2]
     url = f'https://github.com/NeonixRIT/GradingScripts/archive/refs/tags/{version}.zip'

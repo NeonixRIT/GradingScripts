@@ -63,6 +63,10 @@ def bool_prompt(prompt: str, default_output: bool) -> bool:
 
 
 def print_updates(current_version: str, tui_instance):
+    '''
+    TODO: use requests instead of pygithub to get releases
+    GET /repos/{owner}/{repo}/releases
+    '''
     from github import Github
     client = Github()
     repo = client.get_repo('NeonixRIT/GradingScripts')

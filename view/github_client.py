@@ -18,7 +18,7 @@ from types import SimpleNamespace
 from urllib.parse import urlencode
 
 LOG_FILE_PATH = './data/logs.log'
-UTC_OFFSET = f'{(datetime.now(timezone.utc).astimezone().utcoffset() // timedelta(hours=1) * -1):+03d}:00'
+UTC_OFFSET = (datetime.now(timezone.utc).astimezone().utcoffset() // timedelta(hours=1) * -1)
 
 def get_page_by_rel(links: str, rel: str = 'last'):
     val = re.findall(rf'.*&page=(\d+).*>; rel="{rel}"', links)
@@ -196,7 +196,8 @@ class GitHubAPIClient:
         if not due_time:
             pass
         due_date, due_time = self.__get_adjusted_due_datetime(repo, due_date, due_time)
-        params['until'] = f'{due_date}T{due_time}{UTC_OFFSET}'
+        due_datetime = datetime.strptime(f'{due_date} {due_time}', '%Y-%m-%d %H:%M') + timedelta(hours=UTC_OFFSET)
+        params['until'] = due_datetime.strftime('%Y-%m-%dT%H:%M:%SZ')
         response = await self.__async_request(repo.commits_url[:-6], params)
         if response.status_code != 200:
             return None, None
