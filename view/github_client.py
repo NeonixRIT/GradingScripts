@@ -93,6 +93,8 @@ class GitHubAPIClient:
             'Authorization': f'Bearer {self.__auth_token}',
             'X-GitHub-Api-Version': '2022-11-28',
         }
+        if not auth_token:
+            del self.headers['Authorization']
 
         self.repo_params = {
             'q': f'org:{self.__organization}',

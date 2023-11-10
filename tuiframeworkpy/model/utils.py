@@ -1,11 +1,80 @@
 import json
 import os
+import pathlib
+import re
 import sys
 
 from .colors import LIGHT_GREEN, LIGHT_RED, CYAN, WHITE
 
-import pathlib
 from types import SimpleNamespace
+from urllib.parse import urlencode
+
+
+def get_page_by_rel(links: str, rel: str = 'last'):
+    for token in links.split(', '):
+        if f'rel="{rel}"' not in token:
+            continue
+        val = re.findall(r'[&?]page=(\d+).*>;', links)
+        if val:
+            return int(val[0])
+    return None
+
+
+class BareGitHubAPIClient:
+    def __init__(self) -> None:
+        self.headers = {
+            'Accept': 'application/vnd.github+json',
+            'X-GitHub-Api-Version': '2022-11-28',
+        }
+
+    def __request(self, url: str, params: dict = None):
+        import requests
+        url = f'{url}?{urlencode(params)}' if params else url
+        return requests.get(url, headers=self.headers)
+
+    def get_commits(self, repo, params: dict = None):
+        if repo is None:
+            return None
+        params = {'page': 1, 'per_page': 100}
+        response = self.__request(repo.commits_url[:-6], params)
+        if response.status_code != 200:
+            return None
+        commits = response.json(object_hook=lambda d: SimpleNamespace(**d))
+        if 'Link' not in response.headers:
+            return commits
+        page_limit = get_page_by_rel(response.headers['Link'])
+        if not page_limit:
+            return commits
+        for page_num in range(2, page_limit + 1):
+            params['page'] = page_num
+            response = self.__request(repo.commits_url[:-6], params)
+            commits.extend(response.json(object_hook=lambda d: SimpleNamespace(**d)))
+        return commits
+
+    def get_repo(self, owner, repo_name, params: dict = None):
+        response = self.__request(f'https://api.github.com/repos/{owner}/{repo_name}', params)
+        if response.status_code != 200:
+            return None
+        return response.json(object_hook=lambda d: SimpleNamespace(**d))
+
+    def get_releases(self, repo):
+        if repo is None:
+            return None
+        params = {'page': 1, 'per_page': 100}
+        response = self.__request(repo.releases_url[:-5], params)
+        if response.status_code != 200:
+            return None
+        releases = response.json(object_hook=lambda d: SimpleNamespace(**d))
+        if 'Link' not in response.headers:
+            return releases
+        page_limit = get_page_by_rel(response.headers['Link'])
+        if not page_limit:
+            return releases
+        for page_num in range(2, page_limit + 1):
+            params['page'] = page_num
+            response = self.__request(repo.releases_url[:-5], params)
+            releases.extend(response.json(object_hook=lambda d: SimpleNamespace(**d)))
+        return releases
 
 
 def get_application_folder():
@@ -63,14 +132,9 @@ def bool_prompt(prompt: str, default_output: bool) -> bool:
 
 
 def print_updates(current_version: str, tui_instance):
-    '''
-    TODO: use requests instead of pygithub to get releases
-    GET /repos/{owner}/{repo}/releases
-    '''
-    from github import Github
-    client = Github()
-    repo = client.get_repo('NeonixRIT/GradingScripts')
-    releases = repo.get_releases()
+    client = BareGitHubAPIClient()
+    repo = client.get_repo('NeonixRIT', 'GradingScripts')
+    releases = client.get_releases(repo)
     print_release_changes_since_update(releases, current_version)
     # input('Press enter to continue...')
     res = bool_prompt('Do you wish to update now?', True)
