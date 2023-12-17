@@ -78,7 +78,7 @@ def main():
         kernel32 = ctypes.windll.kernel32
         kernel32.SetConsoleMode(kernel32.GetStdHandle(-11), 7)
 
-        # Define Dependencies
+    # Define Dependencies
     git = Dependency('git', '2.30', '')
     requests = Dependency('requests', '2.31.0', 'pip')
 
