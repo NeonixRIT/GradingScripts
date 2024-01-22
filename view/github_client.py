@@ -21,6 +21,7 @@ LOG_FILE_PATH = './data/logs.log'
 UTC_OFFSET = (datetime.now(timezone.utc).astimezone().utcoffset() // timedelta(hours=1))
 CURRENT_TIMEZONE = timezone(timedelta(hours=UTC_OFFSET))
 
+
 def get_page_by_rel(links: str, rel: str = 'last'):
     val = re.findall(rf'.*&page=(\d+).*>; rel="{rel}"', links)
     if val:
@@ -41,9 +42,9 @@ def get_students(student_filename: str) -> dict:
             csv_reader = csv.reader(f_handle)  # Use csv reader to separate values into a list
             next(csv_reader)  # skip header line
             for student in csv_reader:
-                name = re.sub(r'([.]\s?|[,]\s?|\s)', '-', student[0]).replace("'", '-').rstrip(r'-')
-                github = student[1]
-                if name and github: # if csv contains student name and github username, map them to each other
+                name = re.sub(r'([.]\s?|[,]\s?|\s)', '-', student[0]).replace("'", '-').rstrip(r'-').strip()
+                github = student[1].strip()
+                if name and github:  # if csv contains student name and github username, map them to each other
                     students[github] = name
     else:
         raise Exception(f'Classroom roster `{student_filename}` does not exist.')
@@ -54,11 +55,11 @@ def get_time():
     '''
     Get assignment due time from input.
     '''
-    time_due = input('Time Due (24hr, press `enter` for current): ') # get time assignment was due
-    if not time_due: # if time due is blank use current time
-        current_time = datetime.now() # get current time
-        time_due = current_time.strftime('%H:%M') # format current time into hour:minute 24hr format
-        print(f'Using current time: {time_due}') # output what is being used to end user
+    time_due = input('Time Due (24hr, press `enter` for current): ')  # get time assignment was due
+    if not time_due:  # if time due is blank use current time
+        current_time = datetime.now()  # get current time
+        time_due = current_time.strftime('%H:%M')  # format current time into hour:minute 24hr format
+        print(f'Using current time: {time_due}')  # output what is being used to end user
     return time_due
 
 
@@ -66,7 +67,7 @@ def get_date():
     '''
     Get assignment due date from input.
     '''
-    date_due = input('Date Due (format = yyyy-mm-dd, press `enter` for current): ') # get due date
+    date_due = input('Date Due (format = yyyy-mm-dd, press `enter` for current): ')  # get due date
     if not date_due:  # If due date is blank use current date
         current_date = date.today()  # get current date
         date_due = current_date.strftime('%Y-%m-%d')  # get current date in year-month-day format
@@ -134,22 +135,23 @@ class GitHubAPIClient:
             raise ConnectionError('Connection timed out.')
         return True, response.status_code
 
-    async def assignment_exists(self, assignment_name: str) -> bool:
+    async def assignment_exists(self, assignment_name: str) -> tuple:
         '''
         Check if assignment exists
         '''
         if not assignment_name:
-            return True
+            return True, -1
         params = dict(self.repo_params)
         params['per_page'] = 1
         params['q'] = f'{assignment_name} ' + params['q']
         url = 'https://api.github.com/search/repositories'
         response = await self.__async_request(url, params)
         if response.status_code != 200:
-            return False
+            return False, 0
         repo_json = response.json(object_hook=lambda d: SimpleNamespace(**d))
+        print(repo_json)
         if getattr(repo_json, 'total_count', 0) == 0:
-            return False
+            return False, 0
         return True, repo_json.total_count
 
     def print_and_log(self, message: str, assignment_name: str, color: str = WHITE):
@@ -215,7 +217,7 @@ class GitHubAPIClient:
         commit_num = get_page_by_rel(response.headers['link'], 'last') if 'link' in response.headers else 1
         return commit_hash, commit_num
 
-    async def __poll_repos_page(self, params: str, page: int):
+    async def __poll_repos_page(self, params: dict, page: int):
         params['page'] = page
         url = f'https://api.github.com/search/repositories?{urlencode(params)}'
         response = await self.__async_request(url, params)
@@ -256,7 +258,10 @@ class GitHubAPIClient:
             await run(cmd, repo.local_path)
             repo.is_rolled_back = True
         except Exception:
-            self.print_and_log(f'{LIGHT_RED}[{repo.name}] Rollback Failed: Likely invalid filename at commit `{repo.due_commit_hash}`.{WHITE}')
+            self.print_and_log(
+                f'{LIGHT_RED}[{repo.name}] Rollback Failed: Likely invalid filename at commit `{repo.due_commit_hash}`.{WHITE}',
+                repo.assignment_name
+            )
 
     async def get_repos(self, assignment_name: str, due_date: str, due_time: str, refresh: bool = False):
         '''
@@ -278,7 +283,7 @@ class GitHubAPIClient:
         url = 'https://api.github.com/search/repositories'
         response = await self.__async_request(url, params)
         if response.status_code != 200:
-            return response.status_code # raise error based on code
+            return response.status_code  # raise error based on code
         page_limit = 1
         if 'link' in response.headers:
             page_limit = get_page_by_rel(response.headers['link'], 'last')
@@ -292,31 +297,36 @@ class GitHubAPIClient:
         for student_github in self.students:
             student_tuple = (self.students[student_github], student_github)
             if student_tuple not in self.assignment_students_accepted[assignment_name]:
-                self.assignment_students_not_accepted[assignment_name].add((self.students[student_github], student_github))
+                self.assignment_students_not_accepted[assignment_name].add(
+                    (self.students[student_github], student_github))
         return self.assignment_repos[assignment_name]
 
     async def __clone_repo(self, repo, path: Path):
         destination_path = f'{path}/{repo.new_name}'
         clone_str = f'    > Cloning [{repo.name}] {repo.new_name}...'
-        self.print_and_log(clone_str, repo.assignment_name)  # tell end user what repo is being cloned and where it is going to
+        self.print_and_log(clone_str,
+                           repo.assignment_name)  # tell end user what repo is being cloned and where it is going to
         # outputs_log.append(clone_str)
         # run process on system that executes 'git clone' command. stdout is redirected so it doesn't output to end user
         clone_url = repo.clone_url.replace('https://', f'https://{self.__auth_token}@')
-        cmd = f'git clone --single-branch {clone_url} "{destination_path}"' # if not due_tag else f'git clone --branch {due_tag} --single-branch {clone_url} "{destination_path}"'
+        cmd = f'git clone --single-branch {clone_url} "{destination_path}"'  # if not due_tag else f'git clone --branch {due_tag} --single-branch {clone_url} "{destination_path}"'
         await run(cmd)
         repo.local_path = destination_path
         await self.__rollback_repo(repo)
 
-    async def pull_assignment_repos(self, assignment_name: str, path: Path):
+    async def pull_assignment_repos(self, assignment_name: str, path: Path | str):
         '''
         Clones and roles back all repos for a given assignment to the due date/time
         '''
         if assignment_name not in self.assignment_repos:
             raise KeyError(f'Assignment `{assignment_name}` not found. Please run `get_repos` first')
         for student in self.assignment_students_not_accepted[assignment_name]:
-            self.print_and_log(f'    > {LIGHT_RED}Skipping [{student[1]}] {student[0]}: Assignment not accepted before due date/time.{WHITE}', assignment_name)
+            self.print_and_log(
+                f'    > {LIGHT_RED}Skipping [{student[1]}] {student[0]}: Assignment not accepted before due date/time.{WHITE}',
+                assignment_name)
         for student in self.assignment_students_no_commit[assignment_name]:
-            self.print_and_log(f'    > {LIGHT_RED}Skipping [{student[1]}] {student[0]}: Repo has no commits.{WHITE}', assignment_name)
+            self.print_and_log(f'    > {LIGHT_RED}Skipping [{student[1]}] {student[0]}: Repo has no commits.{WHITE}',
+                               assignment_name)
         tasks = []
         for repo in self.assignment_repos[assignment_name]:
             task = asyncio.ensure_future(self.__clone_repo(repo, path))
@@ -370,8 +380,11 @@ class GitHubAPIClient:
         Get assignment name from input. Does not accept empty input.
         '''
         assignment_name = input('Assignment Name: ')  # get assignment name (repo prefix)
-        assignment_exists = await self.assignment_exists(assignment_name)
+        assignment_exists, _ = await self.assignment_exists(assignment_name)
         while not assignment_name or not assignment_exists:  # if input is empty ask again
+            if assignment_name == 'quit()':
+                return assignment_name
+            print(assignment_name, assignment_exists)
             if not assignment_exists:
                 print(f'Assignment `{assignment_name}` not found. Please try again.')
             assignment_name = input('Please input an assignment name: ')
@@ -401,7 +414,8 @@ class GitHubAPIClient:
             self.loaded_csv = students_path
         if preset is None:
             preset = ClonePreset('', '', '', students_path, False, (0, 0, 0))
-            preset.append_timestamp = bool_prompt('Append timestamp to repo folder name?\nIf using a tag name, it will append the tag instead', True)
+            preset.append_timestamp = bool_prompt(
+                'Append timestamp to repo folder name?\nIf using a tag name, it will append the tag instead', True)
         if self.loaded_csv != preset.csv_path:
             self.students = get_students(preset.csv_path)
             self.loaded_csv = preset.csv_path
@@ -422,9 +436,11 @@ class GitHubAPIClient:
             for param in self.context.config_manager.config.extra_student_parameters:
                 if param.github in self.students:
                     print(f'{LIGHT_GREEN}Student found in extra parameters.{WHITE}')
-                    res = input(f'Is this for a {LIGHT_GREEN}class activity(ca){WHITE}, {LIGHT_GREEN}assignment(as){WHITE}, or {LIGHT_GREEN}exam(ex){WHITE}? ')
+                    res = input(
+                        f'Is this for a {LIGHT_GREEN}class activity(ca){WHITE}, {LIGHT_GREEN}assignment(as){WHITE}, or {LIGHT_GREEN}exam(ex){WHITE}? ')
                     while res != 'ca' and res != 'as' and res != 'ex':
-                        res = input(f'Is this for a {LIGHT_GREEN}class activity(ca){WHITE}, {LIGHT_GREEN}assignment(as){WHITE}, or {LIGHT_GREEN}exam(ex){WHITE}? ')
+                        res = input(
+                            f'Is this for a {LIGHT_GREEN}class activity(ca){WHITE}, {LIGHT_GREEN}assignment(as){WHITE}, or {LIGHT_GREEN}exam(ex){WHITE}? ')
                     if res == 'ca':
                         flags = (1, 0, 0)
                     elif res == 'as':
@@ -460,13 +476,18 @@ class GitHubAPIClient:
         os.mkdir(parent_folder_path)
         pull_stop_1 = perf_counter()
 
+        skip_flag = False
         while True:
             pull_start_2 = perf_counter()
-            repos = await self.get_repos(assignment_name, due_date, preset.clone_time, refresh=True)  # get repos for assignment
+            repos = await self.get_repos(assignment_name, due_date, preset.clone_time,
+                                         refresh=True)  # get repos for assignment
             pull_stop_2 = perf_counter()
             if len(repos) > 0:
                 break
-            print(f'{LIGHT_RED}No repos found for specified students and assignment `{assignment_name}`.{WHITE}')
+            if len(repos) == 0 and (len(self.assignment_students_no_commit) > 0 or len(self.assignment_students_not_accepted) > 0):
+                skip_flag = True
+                break
+            print(f'{LIGHT_RED}No students have accepted the assignment `{assignment_name}`.{WHITE}')
             print('Please try again or type `quit()` to return to the clone menu.')
             tmp_flags = self.assignment_flags[assignment_name]
             del self.assignment_flags[assignment_name]
@@ -487,7 +508,8 @@ class GitHubAPIClient:
         outdir_str = f'Output directory: {outdir}'
         self.print_and_log(outdir_str, assignment_name)
         await self.pull_assignment_repos(assignment_name, parent_folder_path)
-        await self.extract_data_folder(assignment_name, parent_folder_path)
+        if not skip_flag:
+            await self.extract_data_folder(assignment_name, parent_folder_path)
         pull_stop_3 = perf_counter()
         pull_time = (pull_stop_3 - pull_start_3) + (pull_stop_2 - pull_start_2) + (pull_stop_1 - pull_start_1)
 

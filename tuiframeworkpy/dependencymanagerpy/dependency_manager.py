@@ -27,5 +27,5 @@ class DependencyManager:
             print(die.message)
             exit(1)
         except (Exception, KeyboardInterrupt) as e:
-            print(f'{LIGHT_RED}FATAL: An unknown error occured\n{e}{WHITE}')
+            print(f'{LIGHT_RED}FATAL: An unknown error occurred\n{e}{WHITE}')
             exit(1)
