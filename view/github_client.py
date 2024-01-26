@@ -149,7 +149,6 @@ class GitHubAPIClient:
         if response.status_code != 200:
             return False, 0
         repo_json = response.json(object_hook=lambda d: SimpleNamespace(**d))
-        print(repo_json)
         if getattr(repo_json, 'total_count', 0) == 0:
             return False, 0
         return True, repo_json.total_count
