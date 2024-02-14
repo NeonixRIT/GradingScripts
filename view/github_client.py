@@ -254,7 +254,8 @@ class GitHubAPIClient:
             # run process on system that executes 'git reset' command. stdout is redirected so it doesn't output to end user
             # git reset is similar to checkout but doesn't care about detached heads and is more forceful
             cmd = f'git reset --hard {repo.due_commit_hash}'
-            await run(cmd, repo.local_path)
+            if not self.dry_run:
+                await run(cmd, repo.local_path)
             repo.is_rolled_back = True
         except Exception:
             self.print_and_log(
@@ -309,7 +310,8 @@ class GitHubAPIClient:
         # run process on system that executes 'git clone' command. stdout is redirected so it doesn't output to end user
         clone_url = repo.clone_url.replace('https://', f'https://{self.__auth_token}@')
         cmd = f'git clone --single-branch {clone_url} "{destination_path}"'  # if not due_tag else f'git clone --branch {due_tag} --single-branch {clone_url} "{destination_path}"'
-        await run(cmd)
+        if not self.dry_run:
+            await run(cmd)
         repo.local_path = destination_path
         await self.__rollback_repo(repo)
 
@@ -414,7 +416,7 @@ class GitHubAPIClient:
         if preset is None:
             preset = ClonePreset('', '', '', students_path, False, (0, 0, 0))
             preset.append_timestamp = bool_prompt(
-                'Append timestamp to repo folder name?\nIf using a tag name, it will append the tag instead', True)
+                'Append timestamp to repo folder name?', not self.replace_files)
         if self.loaded_csv != preset.csv_path:
             self.students = get_students(preset.csv_path)
             self.loaded_csv = preset.csv_path
@@ -422,7 +424,8 @@ class GitHubAPIClient:
         students_time = students_stop - students_start
 
         assignment_name = await self.attempt_get_assignment()  # prompt and verify assignment name
-
+        if assignment_name == 'quit()':
+            return
         # due_tag = ''
         # if self.clone_via_tag:
         #     due_tag = attempt_get_tag()
@@ -468,11 +471,16 @@ class GitHubAPIClient:
         pull_start_1 = perf_counter()
         i = 0
         parent_folder_path = f'{self.context.config_manager.config.out_dir}/{assignment_name}{preset.folder_suffix}'  # prompt parent folder (IE assingment_name-AS in config.out_dir)
-        while Path(parent_folder_path).exists():
+        while Path(parent_folder_path).exists() and not self.replace_files:
             i += 1
             parent_folder_path = f'{self.context.config_manager.config.out_dir}/{assignment_name}{preset.folder_suffix}_iter_{i}'
 
-        os.mkdir(parent_folder_path)
+        if Path(parent_folder_path).exists() and self.replace_files and not self.dry_run:
+            for folder in os.listdir(parent_folder_path):
+                shutil.rmtree(f'{parent_folder_path}/{folder}')
+
+        if not self.dry_run and not Path(parent_folder_path).exists():
+            os.mkdir(parent_folder_path)
         pull_stop_1 = perf_counter()
 
         skip_flag = False
@@ -507,7 +515,7 @@ class GitHubAPIClient:
         outdir_str = f'Output directory: {outdir}'
         self.print_and_log(outdir_str, assignment_name)
         await self.pull_assignment_repos(assignment_name, parent_folder_path)
-        if not skip_flag:
+        if not skip_flag and not self.dry_run:
             await self.extract_data_folder(assignment_name, parent_folder_path)
         pull_stop_3 = perf_counter()
         pull_time = (pull_stop_3 - pull_start_3) + (pull_stop_2 - pull_start_2) + (pull_stop_1 - pull_start_1)
@@ -522,7 +530,7 @@ class GitHubAPIClient:
             preset.clone_time,
             datetime.today().strftime('%Y-%m-%d'),
             datetime.now().strftime('%H:%M'),
-            '',
+            self.dry_run,
             str(students_path),
             tuple(self.assignment_output_log[assignment_name])
         )

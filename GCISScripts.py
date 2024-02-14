@@ -87,10 +87,11 @@ def main():
     org_entry = ConfigEntry('organization', 'Organization', None, 'Organization Name: ', prompt=True)
     students_csv = ConfigEntry('students_csv', 'Students CSV Path', None, 'Enter path of csv file containing username and name of students: ', prompt=True, is_path=True)
     out_dir_entry = ConfigEntry('out_dir', 'Output Folder', '.', 'Output directory for assignment files (`enter` for current directory): ', prompt=True, is_path=True)
+    replace_clone_duplicates = ConfigEntry('replace_clone_duplicates', 'Replace Duplicate Output Folder', True, 'Replace content in output directory instead of changing name?', prompt=True, is_bool_prompt=True)
     presets = ConfigEntry('presets', 'Presets', [], None, prompt=False)
     clone_history = ConfigEntry('clone_history', 'Clone History', [], None, prompt=False)
     student_params = ConfigEntry('extra_student_parameters', 'Extra Student Parameters', [], None, prompt=True)
-    config_entries = [token_entry, org_entry, students_csv, out_dir_entry, presets, clone_history, student_params]
+    config_entries = [token_entry, org_entry, students_csv, out_dir_entry, replace_clone_duplicates, presets, clone_history, student_params]
 
     # Define Default Folders
     default_paths = ['./data', './data/csvs', './data/files_to_add', str(app_folder)]

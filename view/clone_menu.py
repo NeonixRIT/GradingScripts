@@ -14,13 +14,13 @@ LOG_FILE_PATH = './data/logs.log'
 
 
 class CloneMenu(SubMenu):
-    __slots__ = ['client', 'local_options', 'preset_options', 'clone_via_tag', 'parameters']
+    __slots__ = ['client', 'local_options', 'preset_options', 'dry_run', 'parameters']
 
     def __init__(self, id):
         self.client = None
         self.local_options = []
         self.preset_options = []
-        self.clone_via_tag = False
+        self.dry_run = False
 
         self.parameters = dict()
 
@@ -28,10 +28,10 @@ class CloneMenu(SubMenu):
         manage_presets.on_exit += self.load
         self.local_options.append(manage_presets)
 
-        toggle_clone_tag_event = Event()
-        toggle_clone_tag_event += self.toggle_clone_via_tag
-        toggle_clone_tag_event += self.load
-        toggle_clone_tag = MenuOption(2, f'Clone Via Tag: {get_color_from_bool(self.clone_via_tag)}{self.clone_via_tag}{WHITE}', toggle_clone_tag_event, Event(), Event(), pause=False, enabled=False)
+        toggle_dry_run_event = Event()
+        toggle_dry_run_event += self.toggle_dry_run
+        toggle_dry_run_event += self.load
+        toggle_clone_tag = MenuOption(2, f'Dry Run: {get_color_from_bool(self.dry_run)}{self.dry_run}{WHITE}', toggle_dry_run_event, Event(), Event(), pause=False)
         self.local_options.append(toggle_clone_tag)
 
         clone_history = MenuOption(3, 'Clone History', Event(), Event(), Event(), pause=False)
@@ -52,8 +52,8 @@ class CloneMenu(SubMenu):
         self.preset_options = self.build_preset_options()
         for i, option in enumerate(self.local_options):
             option.number = len(self.preset_options) + i + 1
-            if option.text.startswith('Clone Via Tag: '):
-                option.text = f'Clone Via Tag: {get_color_from_bool(self.clone_via_tag)}{self.clone_via_tag}{WHITE}'
+            if option.text.startswith('Dry Run: '):
+                option.text = f'Dry Run: {get_color_from_bool(self.dry_run)}{self.dry_run}{WHITE}'
         options = self.preset_options + self.local_options
         self.options = dict()
         for menu_option in options:
@@ -62,8 +62,8 @@ class CloneMenu(SubMenu):
         self.invalid_input_string = f'You entered an invalid option.\n\nPlease enter a number between {self.min_options} and {self.max_options}.\nPress enter to try again.'
         self.prompt_string = self.prompt_string = f'Please enter a number {LIGHT_GREEN}({self.min_options}-{self.max_options}){WHITE} or {LIGHT_RED}q/quit{WHITE} to return to the previous menu: '
 
-    def toggle_clone_via_tag(self):
-        self.clone_via_tag = not self.clone_via_tag
+    def toggle_dry_run(self):
+        self.dry_run = not self.dry_run
 
     def save_report(self, report):
         clone_logs = self.context.config_manager.config.clone_history
@@ -73,7 +73,11 @@ class CloneMenu(SubMenu):
         self.context.config_manager.set_config_value('clone_history', clone_logs)
 
     def clone_repos(self, preset: ClonePreset = None):
+        self.client.dry_run = bool(self.dry_run)
+        self.client.replace_files = bool(self.context.config_manager.config.replace_clone_duplicates)
         asyncio.run(self.client.run(preset))
+        del self.client.replace_files
+        del self.client.dry_run
 
     def build_preset_options(self) -> list:
         options = []

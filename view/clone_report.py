@@ -9,6 +9,6 @@ class CloneReport:
     due_time: str = ''
     current_date: str = ''
     current_time: str = ''
-    tag_name: str = ''
+    dry_run: str = ''
     student_csv: str = ''
     outputs_log: tuple = ()

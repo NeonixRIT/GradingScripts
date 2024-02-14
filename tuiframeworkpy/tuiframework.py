@@ -24,8 +24,7 @@ class TUI:
         depends_man = DependencyManager([versionamanagerpy] + dependencies)
 
         debug_entry = ConfigEntry('debug', 'Debug', False, 'Would you like to enable debug mode (not recommended)?', is_bool_prompt=True)
-        metrics_entry = ConfigEntry('metrics_api', 'Metrics API', True, 'Would you like to contribute to Metrics data?', prompt=True, is_bool_prompt=True)
-        conf_man = ConfigManager(config_path, config_entries + [debug_entry, metrics_entry])
+        conf_man = ConfigManager(config_path, config_entries + [debug_entry])
 
         self.context = Context(conf_man, depends_man, self)
 

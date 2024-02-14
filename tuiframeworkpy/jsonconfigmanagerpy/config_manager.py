@@ -121,7 +121,7 @@ class ConfigManager():
         missing_fields = set()
         for entry in self.config_entries:
             if getattr(self.config, entry.name, None) is None:
-                if entry.prompt and entry.default_value is None:
+                if entry.prompt and (entry.default_value is None or entry.is_bool_prompt):
                     missing_fields.add(entry.name)
                 else:
                     setattr(self.config, entry.name, entry.default_value)

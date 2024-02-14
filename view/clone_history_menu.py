@@ -13,7 +13,7 @@ class CloneHistoryMenu(SubMenu):
         self.local_option = [clear_history_options]
 
         SubMenu.__init__(self, id, 'Clone History', self.local_option, Event(), Event(), preload=False)
-        assign_str = 'Assignment[:Tag]'.ljust(25)
+        assign_str = 'Assignment:dry_run'.ljust(25)
         due_str = 'Due'.ljust(20)
         curr_str = 'Current'.ljust(20)
         self.legend = f'{CYAN}{assign_str}{LIGHT_GREEN}{due_str}{LIGHT_RED}{curr_str}{WHITE}'
@@ -42,7 +42,7 @@ class CloneHistoryMenu(SubMenu):
                          f'Due Time: {report.due_time}\n' + \
                          f'Current Date: {report.current_date}\n' + \
                          f'Current Time: {report.current_time}\n' + \
-                         f'Tag Name: {report.tag_name}\n' + \
+                         f'Dry Run: {report.dry_run}\n' if getattr(report, 'dry_run', False) else f'Tag Name: {getattr(report, 'tag_name', 'Error')}\n' + \
                          f'Student CSV: {report.student_csv}{WHITE}\n\n'
 
             for line in report.outputs_log:
@@ -60,7 +60,7 @@ class CloneHistoryMenu(SubMenu):
 
 
 def report_summary(report):
-    assignment_tag_str = f'{report.assignment_name}:{report.tag_name}' if report.tag_name else f'{report.assignment_name}'.ljust(25)
+    assignment_tag_str = f'{report.assignment_name}:{report.dry_run}'.ljust(25) if getattr(report, 'dry_run', False) else f'{report.assignment_name}'.ljust(25)
     due_str = f'{report.due_date} {report.due_time}'.ljust(20)
     curr_str = f'{report.current_date} {report.current_time}'.ljust(20)
     return f'{CYAN}{assignment_tag_str}{LIGHT_GREEN}{due_str}{LIGHT_RED}{curr_str}{WHITE}'
