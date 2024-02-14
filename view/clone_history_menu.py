@@ -42,7 +42,7 @@ class CloneHistoryMenu(SubMenu):
                          f'Due Time: {report.due_time}\n' + \
                          f'Current Date: {report.current_date}\n' + \
                          f'Current Time: {report.current_time}\n' + \
-                         f'Dry Run: {report.dry_run}\n' if getattr(report, 'dry_run', False) else f'Tag Name: {getattr(report, 'tag_name', 'Error')}\n' + \
+                         f'Dry Run: {report.dry_run}\n' if getattr(report, 'dry_run', False) else f'Tag Name: {getattr(report, "tag_name", None)}\n' + \
                          f'Student CSV: {report.student_csv}{WHITE}\n\n'
 
             for line in report.outputs_log:
