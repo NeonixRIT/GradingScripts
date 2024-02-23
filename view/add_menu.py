@@ -43,13 +43,7 @@ class AddMenu(SubMenu):
         loop1 = asyncio.new_event_loop()
         asyncio.set_event_loop(loop1)
         loop1.run_until_complete(self.read_files_to_mem())
-
-        loop2 = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop2)
-        loop2.run_until_complete(self.write_to_repos())
-
-        loop1 = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop1)
+        loop1.run_until_complete(self.write_to_repos())
         loop1.run_until_complete(self.do_all_git_workflow())
 
         print(f'{LIGHT_GREEN}Done.{WHITE}')
@@ -66,7 +60,7 @@ class AddMenu(SubMenu):
         tasks = []
         for root, folders, files in os.walk('./data/files_to_add/'):  # self.config.files_to_add_path
             for file in folders + files:
-                if '.git' in file:
+                if '.git' in root:
                     continue
 
                 task = asyncio.ensure_future(self.read_file_to_mem(str(Path(root) / Path(file))))
@@ -100,9 +94,10 @@ class AddMenu(SubMenu):
         await asyncio.gather(*tasks)
 
     async def do_git_workflow(self, repo_path, commit_message):
-        await run('git add *', repo_path)
-        await run(f'git commit -m "{commit_message}"', repo_path)
-        await run('git push', repo_path)
+        print(await run('git pull', repo_path))
+        print(await run('git add -A', repo_path))
+        print(await run(f'git commit -m "{commit_message}"', repo_path))
+        print(await run('git push', repo_path))
 
     async def do_all_git_workflow(self):
         tasks = []
