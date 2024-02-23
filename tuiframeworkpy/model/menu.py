@@ -69,15 +69,7 @@ class Menu:
         middle_len -= len(CYAN) if CYAN in self.name else 0
         middle_len -= len(WHITE) if WHITE in self.name else 0
         legend_str = f'Legend: {self.legend}\n' if self.legend else ''
-        out_str = (
-            ('*' * middle_len)
-            + '\n'
-            + f'************** {LIGHT_GREEN}{self.name}{WHITE} **************\n'
-            + ('*' * middle_len)
-            + '\n\n'
-            + legend_str
-            + 'Enter Selection:\n'
-        )
+        out_str = ('*' * middle_len) + '\n' + f'************** {LIGHT_GREEN}{self.name}{WHITE} **************\n' + ('*' * middle_len) + '\n\n' + legend_str + 'Enter Selection:\n'
         for option in self.options:
             out_str += f'    {self.options[option]}\n'
         out_str += '\n'

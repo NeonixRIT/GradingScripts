@@ -79,9 +79,7 @@ if update_with_git:
             stdin=subprocess.PIPE,
         )
     except Exception as e:
-        print(
-            f'{LIGHT_RED}FATAL: Exception occured while trying to update:{WHITE}\n\t{e}'
-        )
+        print(f'{LIGHT_RED}FATAL: Exception occured while trying to update:{WHITE}\n\t{e}')
         print('Unable to complete auto update.')
         input('Press enter to exit...')
         exit()

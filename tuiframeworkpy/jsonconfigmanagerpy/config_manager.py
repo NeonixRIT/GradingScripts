@@ -28,7 +28,9 @@ class ConfigManager:
         'on_config_verify',
     ]
 
-    def __init__(self, config_path: str, config_entries=[]):
+    def __init__(self, config_path: str, config_entries: list[ConfigEntry] = None):
+        if config_entries is None:
+            config_entries = []
         self.config_path = config_path
         self.config_entries = config_entries
 
@@ -51,9 +53,7 @@ class ConfigManager:
             if entry.censor:
                 self.censored_entries.append(entry.name)
             if entry.is_bool_prompt and not isinstance(entry.default_value, bool):
-                raise TypeError(
-                    'ConfigEntry default_value must be a bool if bool_prompt is true.'
-                )
+                raise TypeError('ConfigEntry default_value must be a bool if bool_prompt is true.')
             self.friendly_names_dict[entry.name] = entry.friendly_name
             self.default_config_dict[entry.name] = entry.default_value
             self.name_to_entry[entry.name] = entry
@@ -68,11 +68,7 @@ class ConfigManager:
         return result
 
     def __iadd__(self, other: ConfigEntry | list[ConfigEntry] | Any):
-        if isinstance(other, ConfigEntry) or (
-            isinstance(other, list)
-            and len(other) > 0
-            and isinstance(other[0], ConfigEntry)
-        ):
+        if isinstance(other, ConfigEntry) or (isinstance(other, list) and len(other) > 0 and isinstance(other[0], ConfigEntry)):
             self.config_entries.append(other)
         elif callable(other):
             self.custom_verify_methods += lambda: other(self.config)
@@ -110,9 +106,7 @@ class ConfigManager:
 
     def make_new_config(self):
         print(f'{CYAN}Welcome to the initial setup.{WHITE}')
-        print(
-            f'{CYAN}We will be creating a new config file at {self.config_path}{WHITE}'
-        )
+        print(f'{CYAN}We will be creating a new config file at {self.config_path}{WHITE}')
         print(f'{CYAN}There are just a few values you need to enter first.{WHITE}\n')
         values = {}
         for entry in self.config_entries:
@@ -131,9 +125,7 @@ class ConfigManager:
             values[entry.name] = entry_value
 
         values_formatted = json.dumps(values, indent=4, cls=EnhancedJSONEncoder)
-        self.config = json.loads(
-            values_formatted, object_hook=lambda d: SimpleNamespace(**d)
-        )
+        self.config = json.loads(values_formatted, object_hook=lambda d: SimpleNamespace(**d))
         self.verify_config()
 
     def verify_paths(self) -> set:
@@ -148,31 +140,20 @@ class ConfigManager:
         missing_fields = set()
         for entry in self.config_entries:
             if getattr(self.config, entry.name, None) is None:
-                if entry.prompt and (
-                    entry.default_value is None or entry.is_bool_prompt
-                ):
+                if entry.prompt and (entry.default_value is None or entry.is_bool_prompt):
                     missing_fields.add(entry.name)
                 else:
                     setattr(self.config, entry.name, entry.default_value)
 
-        invalid_fields = {
-            value
-            for value in self.verify_paths()
-            or missing_fields
-            or self.__flatten_set(self.custom_verify_methods())
-        }
+        invalid_fields = {value for value in self.verify_paths() or missing_fields or self.__flatten_set(self.custom_verify_methods())}
         if len(invalid_fields) > 0:
-            print(
-                f'{LIGHT_RED}WARNING: Some values in your config seem to be missing or invalid. Please enter their fixed values.{WHITE}'
-            )
+            print(f'{LIGHT_RED}WARNING: Some values in your config seem to be missing or invalid. Please enter their fixed values.{WHITE}')
         for field in invalid_fields:
             entry = self.name_to_entry[field]
 
             def prompt_func(bound_entry=entry):
                 if bound_entry.is_bool_prompt:
-                    return self.bool_prompt(
-                        bound_entry.prompt_text, bound_entry.default_value
-                    )
+                    return self.bool_prompt(bound_entry.prompt_text, bound_entry.default_value)
                 else:
                     return input(bound_entry.prompt_text)
 
@@ -185,18 +166,8 @@ class ConfigManager:
     def bool_prompt(self, prompt: str, default_output: bool) -> bool:
         y_str = 'Y' if default_output else 'y'
         n_str = 'N' if not default_output else 'n'
-        result = input(
-            f'{prompt} ({LIGHT_GREEN}{y_str}{WHITE}/{LIGHT_RED}{n_str}{WHITE}): '
-        )
-        return (
-            default_output
-            if not result
-            else True
-            if result.lower() == 'y'
-            else False
-            if result.lower() == 'n'
-            else default_output
-        )
+        result = input(f'{prompt} ({LIGHT_GREEN}{y_str}{WHITE}/{LIGHT_RED}{n_str}{WHITE}): ')
+        return default_output if not result else True if result.lower() == 'y' else False if result.lower() == 'n' else default_output
 
     def set_config_value(self, name: str, value: Any):
         setattr(self.config, name, value)
@@ -205,9 +176,7 @@ class ConfigManager:
     def __censor_string(self, string: str) -> str | None:
         if len(string) <= 7:
             return
-        return ('*' * int(len(string) - len(string) / 5)) + string[
-            -int(len(string) / 5) :
-        ]
+        return ('*' * int(len(string) - len(string) / 5)) + string[-int(len(string) / 5) :]
 
     def __flatten_set(self, iter: Iterable):
         return {item for sublist in iter for item in sublist}

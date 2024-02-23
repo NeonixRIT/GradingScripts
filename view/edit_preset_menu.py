@@ -33,9 +33,7 @@ class EditPresetMenu(SubMenu):
 
         edit_name_event = Event()
         edit_name_event += lambda: self.edit_config_value(0)
-        edit_name = MenuOption(
-            1, f'Name: {self.preset[0]}', edit_name_event, Event(), Event(), False
-        )
+        edit_name = MenuOption(1, f'Name: {self.preset[0]}', edit_name_event, Event(), Event(), False)
         self.local_options.append(edit_name)
 
         edit_suffix_event = Event()
@@ -52,9 +50,7 @@ class EditPresetMenu(SubMenu):
 
         edit_time_event = Event()
         edit_time_event += lambda: self.edit_config_value(2)
-        edit_time = MenuOption(
-            3, f'Clone Time: {self.preset[2]}', edit_time_event, Event(), Event(), False
-        )
+        edit_time = MenuOption(3, f'Clone Time: {self.preset[2]}', edit_time_event, Event(), Event(), False)
         self.local_options.append(edit_time)
 
         edit_csv_event = Event()
@@ -83,9 +79,7 @@ class EditPresetMenu(SubMenu):
 
         delete_preset_event = Event()
         delete_preset_event += self.delete_preset
-        delete_preset = MenuOption(
-            6, 'Delete Preset', delete_preset_event, Event(), Event(), False
-        )
+        delete_preset = MenuOption(6, 'Delete Preset', delete_preset_event, Event(), Event(), False)
         self.local_options.append(delete_preset)
 
         edit_name.on_exit += self.load
@@ -143,21 +137,15 @@ class EditPresetMenu(SubMenu):
 
         if value_index == 0:
             while self.check_preset_names(new_value):
-                new_value = input(
-                    f'{LIGHT_RED}That name already exists{WHITE}\n{prompt}'
-                )
+                new_value = input(f'{LIGHT_RED}That name already exists{WHITE}\n{prompt}')
         if value_index == 1:
             pass  # check that doesnt contain invalid file character
         if value_index == 2:
             while not check_time(new_value):
-                new_value = input(
-                    f'{LIGHT_RED}Time was in an invalid format. Use 24 hour time (e.g. 13:37){WHITE}\n{prompt}'
-                )
+                new_value = input(f'{LIGHT_RED}Time was in an invalid format. Use 24 hour time (e.g. 13:37){WHITE}\n{prompt}')
         if value_index == 3:
             while not Path(new_value).exists() or not new_value.endswith('.csv'):
-                new_value = input(
-                    f'{LIGHT_RED}No Students CSV found at: {new_value}{WHITE}\n{prompt}'
-                )
+                new_value = input(f'{LIGHT_RED}No Students CSV found at: {new_value}{WHITE}\n{prompt}')
 
         self.set_config_value(value_index, new_value)
 
@@ -175,23 +163,15 @@ class EditPresetMenu(SubMenu):
         folder_suffix = input(f'{prompt_prefix} folder suffix: ')
         clone_time = input(f'{prompt_prefix} clone time: ')
         while not check_time(clone_time):
-            clone_time = input(
-                f'{LIGHT_RED}Time was in an invalid format. Use 24 hour time (e.g. 13:37)\n{prompt_prefix} clone time: '
-            )
+            clone_time = input(f'{LIGHT_RED}Time was in an invalid format. Use 24 hour time (e.g. 13:37)\n{prompt_prefix} clone time: ')
         csv_path = input(f'{prompt_prefix} desired csv file (enter for default): ')
-        append_timestamp = input(
-            f'Would you like to append a timestamp to the folder suffix ({LIGHT_GREEN}Y{WHITE}/{LIGHT_RED}N{WHITE})? '
-        ).lower()
+        append_timestamp = input(f'Would you like to append a timestamp to the folder suffix ({LIGHT_GREEN}Y{WHITE}/{LIGHT_RED}N{WHITE})? ').lower()
 
-        append_timestamp = (
-            True if append_timestamp == 'y' or append_timestamp == 'yes' else False
-        )
+        append_timestamp = True if append_timestamp == 'y' or append_timestamp == 'yes' else False
         if not csv_path:
             csv_path = self.context.config_manager.config.students_csv
 
-        self.context.config_manager.config.presets.append(
-            [name, folder_suffix, clone_time, csv_path, append_timestamp]
-        )
+        self.context.config_manager.config.presets.append([name, folder_suffix, clone_time, csv_path, append_timestamp])
         self.context.config_manager.save_config()
 
     def find_preset_by_name(self, name) -> tuple:
@@ -200,9 +180,7 @@ class EditPresetMenu(SubMenu):
                 return i, preset
 
     def check_preset_names(self, name):
-        for preset in list_to_multi_clone_presets(
-            self.context.config_manager.config.presets
-        ):
+        for preset in list_to_multi_clone_presets(self.context.config_manager.config.presets):
             if preset.name == name:
                 return True
         return False

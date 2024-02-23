@@ -26,18 +26,8 @@ def censor_string(string: str) -> str | None:
 def bool_prompt(prompt: str, default_output: bool) -> bool:
     y_str = 'Y' if default_output else 'y'
     n_str = 'N' if not default_output else 'n'
-    result = input(
-        f'{prompt} ({LIGHT_GREEN}{y_str}{WHITE}/{LIGHT_RED}{n_str}{WHITE}): '
-    )
-    return (
-        default_output
-        if not result
-        else True
-        if result.lower() == 'y'
-        else False
-        if result.lower() == 'n'
-        else default_output
-    )
+    result = input(f'{prompt} ({LIGHT_GREEN}{y_str}{WHITE}/{LIGHT_RED}{n_str}{WHITE}): ')
+    return default_output if not result else True if result.lower() == 'y' else False if result.lower() == 'n' else default_output
 
 
 def get_color_from_status(status) -> str:
@@ -56,45 +46,23 @@ def print_release_changes_since_update(releases, current_version) -> None:
     from versionmanagerpy import version
 
     current_version = version.Version(current_version)
-    print(
-        f'{LIGHT_GREEN}An upadate is available. {current_version} -> {releases[0].tag_name}{WHITE}'
-    )
+    print(f'{LIGHT_GREEN}An upadate is available. {current_version} -> {releases[0].tag_name}{WHITE}')
     for release in list(releases)[::-1]:
         release_version = version.Version(release.tag_name)
         if release_version > current_version:
-            print(
-                f'{LIGHT_GREEN}Version: {release_version}\nDescription:\n{release.body}\n{WHITE}'
-            )
-
-
-def print_updates(current_version: str):
-    from github import Github
-
-    client = Github()
-    repo = client.get_repo('NeonixRIT/GradingScripts')
-    releases = repo.get_releases()
-    print_release_changes_since_update(releases, current_version)
-    input('Press enter to continue...')
+            print(f'{LIGHT_GREEN}Version: {release_version}\nDescription:\n{release.body}\n{WHITE}')
 
 
 def make_new_config() -> SimpleNamespace:
     token = input('Github Authentication Token: ')
     organization = input('Organization Name: ')
-    student_filename = input(
-        'Enter path of csv file containing username and name of students: '
-    )
-    output_dir = Path(
-        input('Output directory for assignment files (`enter` for current directory): ')
-    )
+    student_filename = input('Enter path of csv file containing username and name of students: ')
+    output_dir = Path(input('Output directory for assignment files (`enter` for current directory): '))
     if not output_dir:
         output_dir = Path.cwd()
     while not Path.is_dir(output_dir):
         print(f'Directory `{output_dir}` not found.')
-        output_dir = Path(
-            input(
-                'Output directory for assignment files (`enter` for current directory): '
-            )
-        )
+        output_dir = Path(input('Output directory for assignment files (`enter` for current directory): '))
 
     values = {
         'token': token,
@@ -138,13 +106,13 @@ def get_color_from_bool(boolean):
     return LIGHT_GREEN if boolean else LIGHT_RED
 
 
-async def run(cmd: str, cwd=os.getcwd()) -> tuple[str | None, str | None]:
+async def run(cmd: str, cwd=None) -> tuple[str | None, str | None]:
     """
     Asyncronously start a subprocess and run a command returning its output
     """
-    proc = await asyncio.create_subprocess_shell(
-        cmd, cwd=cwd, stderr=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE
-    )
+    if cwd is None:
+        cwd = os.getcwd()
+    proc = await asyncio.create_subprocess_shell(cmd, cwd=cwd, stderr=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE)
 
     stdout, stderr = await proc.communicate()
     return (

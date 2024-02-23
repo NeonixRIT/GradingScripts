@@ -56,7 +56,7 @@ class Dependency:
         try:
             subprocess.check_call(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         except subprocess.CalledProcessError as cpe:
-            raise DependencyInstallationError(self, args, cpe)
+            raise DependencyInstallationError from cpe
 
     def check(self) -> tuple[bool, bool]:
         args = []
@@ -66,9 +66,7 @@ class Dependency:
             args = [self.package, self.version_flag]
 
         try:
-            current_version = re.findall(
-                self.version_regex, subprocess.check_output(args).decode().strip()
-            )
+            current_version = re.findall(self.version_regex, subprocess.check_output(args).decode().strip())
             if self.verbose:
                 print(f'    args: {args}')
                 print(f'    Current version: {current_version}')

@@ -53,9 +53,7 @@ class BareGitHubAPIClient:
         return commits
 
     def get_repo(self, owner, repo_name, params: dict = None):
-        response = self.__request(
-            f'https://api.github.com/repos/{owner}/{repo_name}', params
-        )
+        response = self.__request(f'https://api.github.com/repos/{owner}/{repo_name}', params)
         if response.status_code != 200:
             return None
         return response.json(object_hook=lambda d: SimpleNamespace(**d))
@@ -128,32 +126,18 @@ def print_release_changes_since_update(releases, current_version) -> None:
     from versionmanagerpy import version
 
     current_version = version.Version(current_version)
-    print(
-        f'{LIGHT_GREEN}An upadate is available. {current_version} -> {releases[0].tag_name}{WHITE}'
-    )
+    print(f'{LIGHT_GREEN}An upadate is available. {current_version} -> {releases[0].tag_name}{WHITE}')
     for release in list(releases)[::-1]:
         release_version = version.Version(release.tag_name)
         if release_version > current_version:
-            print(
-                f'{LIGHT_GREEN}Version: {release_version}\nDescription:\n{release.body}\n{WHITE}'
-            )
+            print(f'{LIGHT_GREEN}Version: {release_version}\nDescription:\n{release.body}\n{WHITE}')
 
 
 def bool_prompt(prompt: str, default_output: bool) -> bool:
     y_str = 'Y' if default_output else 'y'
     n_str = 'N' if not default_output else 'n'
-    result = input(
-        f'{prompt} ({LIGHT_GREEN}{y_str}{WHITE}/{LIGHT_RED}{n_str}{WHITE}): '
-    )
-    return (
-        default_output
-        if not result
-        else True
-        if result.lower() == 'y'
-        else False
-        if result.lower() == 'n'
-        else default_output
-    )
+    result = input(f'{prompt} ({LIGHT_GREEN}{y_str}{WHITE}/{LIGHT_RED}{n_str}{WHITE}): ')
+    return default_output if not result else True if result.lower() == 'y' else False if result.lower() == 'n' else default_output
 
 
 def print_updates(current_version: str, tui_instance):
@@ -171,21 +155,13 @@ def print_updates(current_version: str, tui_instance):
 def make_new_config() -> SimpleNamespace:
     token = input('Github Authentication Token: ')
     organization = input('Organization Name: ')
-    student_filename = input(
-        'Enter path of csv file containing username and name of students: '
-    )
-    output_dir = pathlib.Path(
-        input('Output directory for assignment files (`enter` for current directory): ')
-    )
+    student_filename = input('Enter path of csv file containing username and name of students: ')
+    output_dir = pathlib.Path(input('Output directory for assignment files (`enter` for current directory): '))
     if not output_dir:
         output_dir = pathlib.Path.cwd()
     while not pathlib.Path.is_dir(output_dir):
         print(f'Directory `{output_dir}` not found.')
-        output_dir = pathlib.Path(
-            input(
-                'Output directory for assignment files (`enter` for current directory): '
-            )
-        )
+        output_dir = pathlib.Path(input('Output directory for assignment files (`enter` for current directory): '))
 
     values = {
         'token': token,

@@ -33,9 +33,7 @@ class AddMenu(SubMenu):
 
         self.repos_folder_path = input('Enter path to cloned repos: ')
         while not Path(self.repos_folder_path).exists():
-            self.repos_folder_path = input(
-                f'{LIGHT_RED}Path entered does not exist{WHITE}\nEnter path to cloned repos: '
-            )
+            self.repos_folder_path = input(f'{LIGHT_RED}Path entered does not exist{WHITE}\nEnter path to cloned repos: ')
 
         # start = time.perf_counter()
         for root, folders, _ in walklevel(self.repos_folder_path):
@@ -66,23 +64,17 @@ class AddMenu(SubMenu):
 
     async def read_files_to_mem(self):
         tasks = []
-        for root, folders, files in os.walk(
-            './data/files_to_add/'
-        ):  # self.config.files_to_add_path
+        for root, folders, files in os.walk('./data/files_to_add/'):  # self.config.files_to_add_path
             for file in folders + files:
                 if '.git' in file:
                     continue
 
-                task = asyncio.ensure_future(
-                    self.read_file_to_mem(str(Path(root) / Path(file)))
-                )
+                task = asyncio.ensure_future(self.read_file_to_mem(str(Path(root) / Path(file))))
                 tasks.append(task)
         await asyncio.gather(*tasks)
 
     async def write_file(self, info, repo_path):
-        path = info[0][
-            len('./data/files_to_add/') - 2 :
-        ]  # self.config.files_to_add_path
+        path = info[0][len('./data/files_to_add/') - 2 :]  # self.config.files_to_add_path
         content = info[1]
         final_path = str(Path(repo_path) / Path(path))
         if content is None:
@@ -101,7 +93,7 @@ class AddMenu(SubMenu):
         print(f'\nRepos Director: {self.repos_folder_path}')
         while not self.read_files.empty():
             info = await self.read_files.get()
-            print(f'    > Writing: {info[0][len("./data/files_to_add/") - 2:]}')
+            print(f'    > Writing: {info[0][len("./data/files_to_add/") - 2 :]}')
             for repo_path in self.repo_paths:
                 task = asyncio.ensure_future(self.write_file(info, repo_path))
                 tasks.append(task)
@@ -117,8 +109,6 @@ class AddMenu(SubMenu):
         commit_message = 'Add Files Via GCIS Grading Scripts.'
         for repo_path in self.repo_paths:
             print(f'    > Pushing: {repo_path}')
-            task = asyncio.ensure_future(
-                self.do_git_workflow(repo_path, commit_message)
-            )
+            task = asyncio.ensure_future(self.do_git_workflow(repo_path, commit_message))
             tasks.append(task)
         await asyncio.gather(*tasks)

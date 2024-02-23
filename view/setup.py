@@ -60,12 +60,8 @@ def read_old_config_raw(old_config_path: str) -> dict:
 def setup(config_manager) -> None:
     clear()
     if search_new_config():
-        print(
-            f'{LIGHT_RED}WARNING:{WHITE} Current config file detected. Running setup will overwrite current config file.'
-        )
-        confimation = input(
-            f'Do you still wish to continue ({LIGHT_GREEN}Y{WHITE}/{LIGHT_RED}N{WHITE})? '
-        ).lower()
+        print(f'{LIGHT_RED}WARNING:{WHITE} Current config file detected. Running setup will overwrite current config file.')
+        confimation = input(f'Do you still wish to continue ({LIGHT_GREEN}Y{WHITE}/{LIGHT_RED}N{WHITE})? ').lower()
         if not confimation == 'y' or confimation == 'yes':
             clear()
             return
@@ -79,9 +75,7 @@ def setup(config_manager) -> None:
         config_manager.save_config(config)
         return
 
-    confimation = input(
-        f'Legacy config file found. Would you like to import these settings ({LIGHT_GREEN}Y{WHITE}/{LIGHT_RED}N{WHITE})? '
-    ).lower()
+    confimation = input(f'Legacy config file found. Would you like to import these settings ({LIGHT_GREEN}Y{WHITE}/{LIGHT_RED}N{WHITE})? ').lower()
     if not confimation == 'y' or confimation == 'yes':
         clear()
         config = config_manager.make_new_config()
@@ -91,13 +85,9 @@ def setup(config_manager) -> None:
     start2 = time.perf_counter()
     old_values = read_old_config_raw(old_config_path)
     old_values_formatted = json.dumps(old_values, indent=4)
-    config = json.loads(
-        old_values_formatted, object_hook=lambda d: SimpleNamespace(**d)
-    )
+    config = json.loads(old_values_formatted, object_hook=lambda d: SimpleNamespace(**d))
     try:
-        shutil.copyfile(
-            config.students_csv, f'./data/csvs/{config.students_csv.split("/")[-1]}'
-        )
+        shutil.copyfile(config.students_csv, f'./data/csvs/{config.students_csv.split("/")[-1]}')
         config.students_csv = f'./data/csvs/{config.students_csv.split("/")[-1]}'
     except Exception:  # if run into error its fine this just QOL feature
         pass
@@ -105,6 +95,4 @@ def setup(config_manager) -> None:
     config.add_rollback = []
     config_manager.save_config(config)
     imported = time.perf_counter() - start2
-    print(
-        f'{LIGHT_GREEN}Legacy values found and imported in {round((found + imported) * 1000, 1)} milliseconds.{WHITE}'
-    )
+    print(f'{LIGHT_GREEN}Legacy values found and imported in {round((found + imported) * 1000, 1)} milliseconds.{WHITE}')

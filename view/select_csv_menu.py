@@ -19,20 +19,10 @@ class SelectCSVMenu(SubMenu):
         self.student_csv_menu_quit = False
         self.context = context
 
-        separator = (
-            '/' if '/' in self.context.config_manager.config.students_csv else '\\'
-        )
-        current_default = self.context.config_manager.config.students_csv.split(
-            separator
-        )[-1]
+        separator = '/' if '/' in self.context.config_manager.config.students_csv else '\\'
+        current_default = self.context.config_manager.config.students_csv.split(separator)[-1]
         options = []
-        for i, file_name in enumerate(
-            [
-                f'* {file}' if current_default == file else file
-                for file in os.listdir('./data/csvs/')
-                if file.endswith('.csv')
-            ]
-        ):
+        for i, file_name in enumerate([f'* {file}' if current_default == file else file for file in os.listdir('./data/csvs/') if file.endswith('.csv')]):
             on_select = Event()
 
             def set_csv_values(bound_file_name=file_name):

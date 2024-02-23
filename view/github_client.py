@@ -39,21 +39,12 @@ def get_students(student_filename: str) -> dict:
     students = {}  # student dict
     if Path(student_filename).exists():  # if classroom roster is found
         with open(student_filename) as f_handle:  # use with to auto close file
-            csv_reader = csv.reader(
-                f_handle
-            )  # Use csv reader to separate values into a list
+            csv_reader = csv.reader(f_handle)  # Use csv reader to separate values into a list
             next(csv_reader)  # skip header line
             for student in csv_reader:
-                name = (
-                    re.sub(r'([.]\s?|[,]\s?|\s)', '-', student[0])
-                    .replace("'", '-')
-                    .rstrip(r'-')
-                    .strip()
-                )
+                name = re.sub(r'([.]\s?|[,]\s?|\s)', '-', student[0]).replace("'", '-').rstrip(r'-').strip()
                 github = student[1].strip()
-                if (
-                    name and github
-                ):  # if csv contains student name and github username, map them to each other
+                if name and github:  # if csv contains student name and github username, map them to each other
                     students[github] = name
     else:
         raise Exception(f'Classroom roster `{student_filename}` does not exist.')
@@ -64,17 +55,11 @@ def get_time():
     """
     Get assignment due time from input.
     """
-    time_due = input(
-        'Time Due (24hr, press `enter` for current): '
-    )  # get time assignment was due
+    time_due = input('Time Due (24hr, press `enter` for current): ')  # get time assignment was due
     if not time_due:  # if time due is blank use current time
         current_time = datetime.now()  # get current time
-        time_due = current_time.strftime(
-            '%H:%M'
-        )  # format current time into hour:minute 24hr format
-        print(
-            f'Using current time: {time_due}'
-        )  # output what is being used to end user
+        time_due = current_time.strftime('%H:%M')  # format current time into hour:minute 24hr format
+        print(f'Using current time: {time_due}')  # output what is being used to end user
     return time_due
 
 
@@ -82,17 +67,11 @@ def get_date():
     """
     Get assignment due date from input.
     """
-    date_due = input(
-        'Date Due (format = yyyy-mm-dd, press `enter` for current): '
-    )  # get due date
+    date_due = input('Date Due (format = yyyy-mm-dd, press `enter` for current): ')  # get due date
     if not date_due:  # If due date is blank use current date
         current_date = date.today()  # get current date
-        date_due = current_date.strftime(
-            '%Y-%m-%d'
-        )  # get current date in year-month-day format
-        print(
-            f'Using current date: {date_due}'
-        )  # output what is being used to end user
+        date_due = current_date.strftime('%Y-%m-%d')  # get current date in year-month-day format
+        print(f'Using current date: {date_due}')  # output what is being used to end user
     return date_due
 
 
@@ -132,9 +111,7 @@ class GitHubAPIClient:
         self.students = None
         self.loaded_csv = None
         if self.context is not None:
-            self.students = get_students(
-                self.context.config_manager.config.students_csv
-            )
+            self.students = get_students(self.context.config_manager.config.students_csv)
             self.loaded_csv = self.context.config_manager.config.students_csv
 
     def is_authorized(self) -> tuple:
@@ -154,7 +131,7 @@ class GitHubAPIClient:
             if not org_auth:
                 return False, response.status_code
         except TimeoutError:
-            raise ConnectionError('Connection timed out.')
+            raise ConnectionError('Connection timed out.') from None
         return True, response.status_code
 
     async def assignment_exists(self, assignment_name: str) -> tuple:
@@ -223,9 +200,7 @@ class GitHubAPIClient:
         if not due_time:
             pass
         due_date, due_time = self.__get_adjusted_due_datetime(repo, due_date, due_time)
-        due_datetime = datetime.strptime(
-            f'{due_date} {due_time}', '%Y-%m-%d %H:%M'
-        ) - timedelta(hours=UTC_OFFSET)
+        due_datetime = datetime.strptime(f'{due_date} {due_time}', '%Y-%m-%d %H:%M') - timedelta(hours=UTC_OFFSET)
         time_diff = due_datetime.hour - due_datetime.astimezone(CURRENT_TIMEZONE).hour
         is_dst_diff = time_diff != 0
         if is_dst_diff:
@@ -238,11 +213,7 @@ class GitHubAPIClient:
         if not commit_json:
             return None, None
         commit_hash = getattr(commit_json[0], 'sha', None)
-        commit_num = (
-            get_page_by_rel(response.headers['link'], 'last')
-            if 'link' in response.headers
-            else 1
-        )
+        commit_num = get_page_by_rel(response.headers['link'], 'last') if 'link' in response.headers else 1
         return commit_hash, commit_num
 
     async def __poll_repos_page(self, params: dict, page: int):
@@ -253,9 +224,7 @@ class GitHubAPIClient:
             return False
         return response.json(object_hook=lambda d: SimpleNamespace(**d)).items
 
-    async def __add_valid_repos(
-        self, assignment_name: str, due_date: str, due_time: str, repos: list
-    ):
+    async def __add_valid_repos(self, assignment_name: str, due_date: str, due_time: str, repos: list):
         for repo in repos:
             student_github = repo.name.replace(f'{assignment_name}-', '')
             if student_github not in self.students:
@@ -265,23 +234,15 @@ class GitHubAPIClient:
             repo.student_github = student_github
             repo.new_name = repo.name.replace(student_github, student_name)
             repo.assignment_name = assignment_name
-            self.assignment_students_accepted[assignment_name].add(
-                (student_name, student_github)
-            )
-            commit_hash, commit_count = await self.__get_commit_info(
-                repo, due_date, due_time
-            )
+            self.assignment_students_accepted[assignment_name].add((student_name, student_github))
+            commit_hash, commit_count = await self.__get_commit_info(repo, due_date, due_time)
             repo.due_commit_hash = commit_hash
             repo.due_commit_count = commit_count
             if commit_hash is None or commit_count is None:
-                self.assignment_students_not_accepted[assignment_name].add(
-                    (student_name, student_github)
-                )
+                self.assignment_students_not_accepted[assignment_name].add((student_name, student_github))
                 continue
             if commit_count <= 1:
-                self.assignment_students_no_commit[assignment_name].add(
-                    (student_name, student_github)
-                )
+                self.assignment_students_no_commit[assignment_name].add((student_name, student_github))
                 continue
             self.assignment_repos[assignment_name].append(repo)
 
@@ -302,9 +263,7 @@ class GitHubAPIClient:
                 repo.assignment_name,
             )
 
-    async def get_repos(
-        self, assignment_name: str, due_date: str, due_time: str, refresh: bool = False
-    ):
+    async def get_repos(self, assignment_name: str, due_date: str, due_time: str, refresh: bool = False):
         """
         Return all repos that have at least one commit before due date/time
         and are from students in class roster and are only for the desired assignment
@@ -338,17 +297,13 @@ class GitHubAPIClient:
         for student_github in self.students:
             student_tuple = (self.students[student_github], student_github)
             if student_tuple not in self.assignment_students_accepted[assignment_name]:
-                self.assignment_students_not_accepted[assignment_name].add(
-                    (self.students[student_github], student_github)
-                )
+                self.assignment_students_not_accepted[assignment_name].add((self.students[student_github], student_github))
         return self.assignment_repos[assignment_name]
 
     async def __clone_repo(self, repo, path: Path):
         destination_path = f'{path}/{repo.new_name}'
         clone_str = f'    > Cloning [{repo.name}] {repo.new_name}...'
-        self.print_and_log(
-            clone_str, repo.assignment_name
-        )  # tell end user what repo is being cloned and where it is going to
+        self.print_and_log(clone_str, repo.assignment_name)  # tell end user what repo is being cloned and where it is going to
         # outputs_log.append(clone_str)
         # run process on system that executes 'git clone' command. stdout is redirected so it doesn't output to end user
         clone_url = repo.clone_url.replace('https://', f'https://{self.__auth_token}@')
@@ -363,9 +318,7 @@ class GitHubAPIClient:
         Clones and roles back all repos for a given assignment to the due date/time
         """
         if assignment_name not in self.assignment_repos:
-            raise KeyError(
-                f'Assignment `{assignment_name}` not found. Please run `get_repos` first'
-            )
+            raise KeyError(f'Assignment `{assignment_name}` not found. Please run `get_repos` first')
         for student in self.assignment_students_not_accepted[assignment_name]:
             self.print_and_log(
                 f'    > {LIGHT_RED}Skipping [{student[1]}] {student[0]}: Assignment not accepted before due date/time.{WHITE}',
@@ -392,19 +345,11 @@ class GitHubAPIClient:
         num_not_accepted = len(self.assignment_students_not_accepted[assignment_name])
         num_accepted = len(self.students) - num_not_accepted
         section_students = len(self.students)
-        accept_str = (
-            f'{LIGHT_GREEN}{num_accepted}{WHITE}'
-            if num_accepted == section_students
-            else f'{LIGHT_RED}{num_accepted}{WHITE}'
-        )
+        accept_str = f'{LIGHT_GREEN}{num_accepted}{WHITE}' if num_accepted == section_students else f'{LIGHT_RED}{num_accepted}{WHITE}'
         full_accept_str = f'{accept_str}{LIGHT_GREEN}/{len(self.students)} accepted the assignment before due datetime.{WHITE}'
 
         num_no_commits = len(self.assignment_students_no_commit[assignment_name])
-        commits_str = (
-            f'{LIGHT_GREEN}{num_no_commits}{WHITE}'
-            if num_no_commits == 0
-            else f'{LIGHT_RED}{num_no_commits}{WHITE}'
-        )
+        commits_str = f'{LIGHT_GREEN}{num_no_commits}{WHITE}' if num_no_commits == 0 else f'{LIGHT_RED}{num_no_commits}{WHITE}'
         full_commits_str = f'{commits_str}{LIGHT_GREEN}/{num_accepted} had no commits.'
 
         cloned_num = 0
@@ -415,18 +360,10 @@ class GitHubAPIClient:
             if getattr(repo, 'is_rolled_back', False):
                 rolled_back_num += 1
 
-        clone_str = (
-            f'{LIGHT_GREEN}{cloned_num}{WHITE}'
-            if cloned_num == total_assignment_repos
-            else f'{LIGHT_RED}{cloned_num}{WHITE}'
-        )
+        clone_str = f'{LIGHT_GREEN}{cloned_num}{WHITE}' if cloned_num == total_assignment_repos else f'{LIGHT_RED}{cloned_num}{WHITE}'
         full_clone_str = f'{LIGHT_GREEN}Cloned {clone_str}{LIGHT_GREEN}/{total_assignment_repos} repos.{WHITE}'
 
-        rolled_back_str = (
-            f'{LIGHT_GREEN}{rolled_back_num}{WHITE}'
-            if rolled_back_num == cloned_num
-            else f'{LIGHT_RED}{rolled_back_num}{WHITE}'
-        )
+        rolled_back_str = f'{LIGHT_GREEN}{rolled_back_num}{WHITE}' if rolled_back_num == cloned_num else f'{LIGHT_RED}{rolled_back_num}{WHITE}'
         full_rolled_back_str = f'{LIGHT_GREEN}Rolled back {rolled_back_str}{LIGHT_GREEN}/{cloned_num} repos.{WHITE}'
 
         print()
@@ -444,13 +381,9 @@ class GitHubAPIClient:
         """
         Get assignment name from input. Does not accept empty input.
         """
-        assignment_name = input(
-            'Assignment Name: '
-        )  # get assignment name (repo prefix)
+        assignment_name = input('Assignment Name: ')  # get assignment name (repo prefix)
         assignment_exists, _ = await self.assignment_exists(assignment_name)
-        while (
-            not assignment_name or not assignment_exists
-        ):  # if input is empty ask again
+        while not assignment_name or not assignment_exists:  # if input is empty ask again
             if assignment_name == 'quit()':
                 return assignment_name
             print(assignment_name, assignment_exists)
@@ -467,9 +400,7 @@ class GitHubAPIClient:
             clone_logs = clone_logs[1:]
         self.context.config_manager.set_config_value('clone_history', clone_logs)
 
-    async def extract_data_folder(
-        self, assignment_name, initial_path, data_folder_name='data'
-    ):
+    async def extract_data_folder(self, assignment_name, initial_path, data_folder_name='data'):
         repos = os.listdir(initial_path)
         repo_to_check = repos[len(repos) - 1]
         folders = os.listdir(Path(initial_path) / repo_to_check)
@@ -501,145 +432,57 @@ class GitHubAPIClient:
         students_stop = perf_counter()
         students_time = students_stop - students_start
 
-        assignment_name = (
-            await self.attempt_get_assignment()
-        )  # prompt and verify assignment name
+        assignment_name = await self.attempt_get_assignment()  # prompt and verify assignment name
         if assignment_name == 'quit()':
             return
-        # due_tag = ''
-        # if self.clone_via_tag:
-        #     due_tag = attempt_get_tag()
-
-        #     if preset.append_timestamp:
-        #         preset.folder_suffix += f'_{due_tag}'
 
         flags = preset.clone_type  # (class activity, assignment, exam)
         if preset.clone_type is None:
-            for param in self.context.config_manager.config.extra_student_parameters:
-                if param.github in self.students:
-                    print(f'{LIGHT_GREEN}Student found in extra parameters.{WHITE}')
-                    res = input(
-                        f'Is this for a {LIGHT_GREEN}class activity(ca){WHITE}, {LIGHT_GREEN}assignment(as){WHITE}, or {LIGHT_GREEN}exam(ex){WHITE}? '
-                    )
-                    while res != 'ca' and res != 'as' and res != 'ex':
-                        res = input(
-                            f'Is this for a {LIGHT_GREEN}class activity(ca){WHITE}, {LIGHT_GREEN}assignment(as){WHITE}, or {LIGHT_GREEN}exam(ex){WHITE}? '
-                        )
-                    if res == 'ca':
-                        flags = (1, 0, 0)
-                    elif res == 'as':
-                        flags = (0, 1, 0)
-                    elif res == 'ex':
-                        flags = (0, 0, 1)
-                    break
+            flags = self.get_student_flags()
 
         self.assignment_flags[assignment_name] = flags
 
         due_date = ''
-        # if not self.clone_via_tag:
         if not preset.clone_time:
             preset.clone_time = get_time()
 
-        due_date = get_date()
-        while not check_date(due_date):
-            due_date = get_date()
+        due_date = self.get_due_date()
 
         if preset.append_timestamp:
-            date_str = due_date[4:].replace('-', '_')
-            time_str = preset.clone_time.replace(':', '_')
-            preset.folder_suffix += f'_{date_str}_{time_str}'
-        # end if
+            preset.folder_suffix = self.get_folder_suffix(preset.folder_suffix, due_date, preset.clone_time)
 
-        pull_start_1 = perf_counter()
-        i = 0
-        parent_folder_path = f'{self.context.config_manager.config.out_dir}/{assignment_name}{preset.folder_suffix}'  # prompt parent folder (IE assingment_name-AS in config.out_dir)
-        while (
-            Path(parent_folder_path).exists()
-            and not self.context.config_manager.config.replace_clone_duplicates
-        ):
-            i += 1
-            parent_folder_path = f'{self.context.config_manager.config.out_dir}/{assignment_name}{preset.folder_suffix}_iter_{i}'
+        parent_folder_path = self.get_parent_folder_path(assignment_name, preset.folder_suffix)
 
-        if (
-            Path(parent_folder_path).exists()
-            and self.context.config_manager.config.replace_clone_duplicates
-            and not self.context.dry_run
-        ):
-            for folder in os.listdir(parent_folder_path):
-                shutil.rmtree(f'{parent_folder_path}/{folder}')
+        self.handle_duplicate_folders(parent_folder_path)
 
-        if not self.context.dry_run and not Path(parent_folder_path).exists():
-            os.mkdir(parent_folder_path)
-        pull_stop_1 = perf_counter()
+        self.create_parent_folder(parent_folder_path)
 
         skip_flag = False
         while True:
-            pull_start_2 = perf_counter()
-            repos = await self.get_repos(
-                assignment_name, due_date, preset.clone_time, refresh=True
-            )  # get repos for assignment
-            pull_stop_2 = perf_counter()
+            repos = await self.get_repos(assignment_name, due_date, preset.clone_time, refresh=True)  # get repos for assignment
             if len(repos) > 0:
                 break
-            if len(repos) == 0 and (
-                len(self.assignment_students_no_commit) > 0
-                or len(self.assignment_students_not_accepted) > 0
-            ):
+            if len(repos) == 0 and (len(self.assignment_students_no_commit) > 0 or len(self.assignment_students_not_accepted) > 0):
                 skip_flag = True
                 break
-            print(
-                f'{LIGHT_RED}No students have accepted the assignment `{assignment_name}`.{WHITE}'
-            )
-            print('Please try again or type `quit()` to return to the clone menu.')
-            tmp_flags = self.assignment_flags[assignment_name]
-            del self.assignment_flags[assignment_name]
-            del self.assignment_repos[assignment_name]
-            del self.assignment_students_accepted[assignment_name]
-            del self.assignment_students_not_accepted[assignment_name]
-            del self.assignment_students_no_commit[assignment_name]
-            del self.assignment_output_log[assignment_name]
+            self.handle_no_students_accepted(assignment_name)
             assignment_name = await self.attempt_get_assignment()
             if assignment_name == 'quit()':
                 return
-            self.assignment_flags[assignment_name] = tmp_flags
+            self.assignment_flags[assignment_name] = self.assignment_flags[assignment_name]
 
-        print()
-
-        pull_start_3 = perf_counter()
-        outdir = parent_folder_path[
-            len(self.context.config_manager.config.out_dir) + 1 :
-        ]
-        outdir_str = f'Output directory: {outdir}'
-        self.print_and_log(outdir_str, assignment_name)
+        self.print_output_directory(parent_folder_path, assignment_name)
         await self.pull_assignment_repos(assignment_name, parent_folder_path)
         if not skip_flag and not self.context.dry_run:
             await self.extract_data_folder(assignment_name, parent_folder_path)
-        pull_stop_3 = perf_counter()
-        pull_time = (
-            (pull_stop_3 - pull_start_3)
-            + (pull_stop_2 - pull_start_2)
-            + (pull_stop_1 - pull_start_1)
-        )
+
+        pull_time = self.calculate_pull_time()
 
         ellapsed_time = pull_time + students_time
         end_report_str = self.print_pull_report(assignment_name, ellapsed_time)
         self.assignment_output_log[assignment_name].append(end_report_str)
 
-        report = CloneReport(
-            assignment_name,
-            due_date,
-            preset.clone_time,
-            datetime.today().strftime('%Y-%m-%d'),
-            datetime.now().strftime('%H:%M'),
-            self.context.dry_run,
-            str(students_path),
-            tuple(self.assignment_output_log[assignment_name]),
-        )
+        report = self.create_clone_report(assignment_name, due_date, preset.clone_time, students_path)
 
         await self.save_report(report)
-        del self.assignment_repos[assignment_name]
-        del self.assignment_students_accepted[assignment_name]
-        del self.assignment_students_not_accepted[assignment_name]
-        del self.assignment_students_no_commit[assignment_name]
-        del self.assignment_output_log[assignment_name]
-        del self.assignment_flags[assignment_name]
+        self.cleanup_assignment_data(assignment_name)

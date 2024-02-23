@@ -109,9 +109,7 @@ def main():
         prompt=True,
         censor=True,
     )
-    org_entry = ConfigEntry(
-        'organization', 'Organization', None, 'Organization Name: ', prompt=True
-    )
+    org_entry = ConfigEntry('organization', 'Organization', None, 'Organization Name: ', prompt=True)
     students_csv = ConfigEntry(
         'students_csv',
         'Students CSV Path',
@@ -137,12 +135,8 @@ def main():
         is_bool_prompt=True,
     )
     presets = ConfigEntry('presets', 'Presets', [], None, prompt=False)
-    clone_history = ConfigEntry(
-        'clone_history', 'Clone History', [], None, prompt=False
-    )
-    student_params = ConfigEntry(
-        'extra_student_parameters', 'Extra Student Parameters', [], None, prompt=True
-    )
+    clone_history = ConfigEntry('clone_history', 'Clone History', [], None, prompt=False)
+    student_params = ConfigEntry('extra_student_parameters', 'Extra Student Parameters', [], None, prompt=True)
     config_entries = [
         token_entry,
         org_entry,
@@ -158,9 +152,7 @@ def main():
     default_paths = ['./data', './data/csvs', './data/files_to_add', str(app_folder)]
 
     # Create TUI
-    tui = TUI(
-        VERSION, [git, requests], 'data/config.json', config_entries, default_paths
-    )
+    tui = TUI(VERSION, [git, requests], 'data/config.json', config_entries, default_paths)
 
     # Add Custom Verify Methods
     tui.context.config_manager += verify_token_org
@@ -193,12 +185,8 @@ def main():
 
     # Setup Menu Options That Open Submenus
     main_menu.options[1].on_select += lambda: tui.open_menu(clone_menu.id)
-    find_option_by_prefix_text(clone_menu, 'Manage Presets').on_select += (
-        lambda: tui.open_menu(preset_menu.id)
-    )
-    find_option_by_prefix_text(clone_menu, 'Clone History').on_select += (
-        lambda: tui.open_menu(clone_history_menu.id)
-    )
+    find_option_by_prefix_text(clone_menu, 'Manage Presets').on_select += lambda: tui.open_menu(preset_menu.id)
+    find_option_by_prefix_text(clone_menu, 'Clone History').on_select += lambda: tui.open_menu(clone_history_menu.id)
     main_menu.options[4].on_select += lambda: tui.open_menu(config_menu.id)
     main_menu.options[2].on_select += add_menu.run
 
