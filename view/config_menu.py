@@ -23,11 +23,17 @@ class ConfigMenu(SubMenu):
             if entry.censor:
                 value = censor_string(value)
             on_select = Event()
-            on_select += lambda value_name=entry.name: self.edit_config_value(value_name)
+            on_select += lambda value_name=entry.name: self.edit_config_value(
+                value_name
+            )
             if isinstance(value, type(list())):
                 text = f'{entry.friendly_name}'
             else:
-                text = f'{entry.friendly_name}: {get_color_from_bool(value)}{value}{WHITE}' if entry.is_bool_prompt else f'{entry.friendly_name}: {value}'
+                text = (
+                    f'{entry.friendly_name}: {get_color_from_bool(value)}{value}{WHITE}'
+                    if entry.is_bool_prompt
+                    else f'{entry.friendly_name}: {value}'
+                )
             option = MenuOption(i + 1, text, on_select, Event(), Event(), pause=False)
             option.on_select += self.load
             self.options[option.number] = option
@@ -42,14 +48,21 @@ class ConfigMenu(SubMenu):
         entry = self.context.config_manager.name_to_entry[value_name]
 
         def prompt_func():
-            return input(entry.prompt_text) if not entry.is_bool_prompt else bool_prompt(entry.prompt_text, entry.default_value)
+            return (
+                input(entry.prompt_text)
+                if not entry.is_bool_prompt
+                else bool_prompt(entry.prompt_text, entry.default_value)
+            )
 
         if value_name in self.custom_edit_fields:
             self.custom_edit_fields[value_name](self.context, entry, prompt_func)
             return
 
         if entry.is_bool_prompt:
-            self.set_config_value(value_name, not getattr(self.context.config_manager.config, value_name, True))
+            self.set_config_value(
+                value_name,
+                not getattr(self.context.config_manager.config, value_name, True),
+            )
         else:
             self.set_config_value(value_name, prompt_func())
 

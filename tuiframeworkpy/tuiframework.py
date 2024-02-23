@@ -14,7 +14,14 @@ from .model.utils import print_updates, clear
 
 
 class TUI:
-    def __init__(self, version, dependencies: list[Dependency], config_path: str, config_entries: list[ConfigEntry], default_paths: list[str]) -> None:
+    def __init__(
+        self,
+        version,
+        dependencies: list[Dependency],
+        config_path: str,
+        config_entries: list[ConfigEntry],
+        default_paths: list[str],
+    ) -> None:
         self.version = version
 
         for directory in default_paths:
@@ -23,7 +30,13 @@ class TUI:
         versionamanagerpy = Dependency('versionmanagerpy', '1.0.2', 'pip')
         depends_man = DependencyManager([versionamanagerpy] + dependencies)
 
-        debug_entry = ConfigEntry('debug', 'Debug', False, 'Would you like to enable debug mode (not recommended)?', is_bool_prompt=True)
+        debug_entry = ConfigEntry(
+            'debug',
+            'Debug',
+            False,
+            'Would you like to enable debug mode (not recommended)?',
+            is_bool_prompt=True,
+        )
         conf_man = ConfigManager(config_path, config_entries + [debug_entry])
 
         self.context = Context(conf_man, depends_man, self)
@@ -54,6 +67,7 @@ class TUI:
             self.on_start()
             self.context.dependency_manager.check_and_install()
             from versionmanagerpy import versionmanager, VersionManager
+
             vm = VersionManager('NeonixRIT', 'GradingScripts', self.version)
 
             update_status = None
@@ -78,7 +92,9 @@ class TUI:
             clear()
             self.on_error()
             if not isinstance(e, KeyboardInterrupt):
-                print(f'\n{LIGHT_RED}FATAL: Unknown Error Occured.{WHITE}\n\n{CYAN}{e}{WHITE}\n')
+                print(
+                    f'\n{LIGHT_RED}FATAL: Unknown Error Occured.{WHITE}\n\n{CYAN}{e}{WHITE}\n'
+                )
                 if getattr(self.context.config_manager.config, 'debug', True):
                     raise e
                 self.menus[0].quit()

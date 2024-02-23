@@ -12,5 +12,7 @@ data/logs.log
 .DS*
 .idea
 .fleet
-/venv
+/.venv
+/.ruff_cache
+ruff.toml
 /repos

@@ -21,6 +21,7 @@ else:
 
 def onerror(func, path, exc_info):
     import stat
+
     if not os.access(path, os.W_OK):
         os.chmod(path, stat.S_IWUSR)
         func(path)
@@ -30,6 +31,7 @@ def onerror(func, path, exc_info):
 
 def download_and_update(save_path):
     import requests
+
     version = sys.argv[1]
     script_location = sys.argv[2]
     url = f'https://github.com/NeonixRIT/GradingScripts/archive/refs/tags/{version}.zip'
@@ -43,6 +45,7 @@ def download_and_update(save_path):
     zip_file.close()
 
     import shutil
+
     source = f'./GradingScripts-{version}/'
     allfiles = os.listdir(source)
     for f in allfiles:
@@ -63,10 +66,22 @@ def download_and_update(save_path):
 if update_with_git:
     try:
         version = sys.argv[1]
-        subprocess.run(['git', 'fetch', 'origin'], cwd=sys.argv[2], stdout=subprocess.PIPE, stdin=subprocess.PIPE)
-        subprocess.run(['git', 'reset', '--hard', version], cwd=sys.argv[2], stdout=subprocess.PIPE, stdin=subprocess.PIPE)
+        subprocess.run(
+            ['git', 'fetch', 'origin'],
+            cwd=sys.argv[2],
+            stdout=subprocess.PIPE,
+            stdin=subprocess.PIPE,
+        )
+        subprocess.run(
+            ['git', 'reset', '--hard', version],
+            cwd=sys.argv[2],
+            stdout=subprocess.PIPE,
+            stdin=subprocess.PIPE,
+        )
     except Exception as e:
-        print(f'{LIGHT_RED}FATAL: Exception occured while trying to update:{WHITE}\n\t{e}')
+        print(
+            f'{LIGHT_RED}FATAL: Exception occured while trying to update:{WHITE}\n\t{e}'
+        )
         print('Unable to complete auto update.')
         input('Press enter to exit...')
         exit()

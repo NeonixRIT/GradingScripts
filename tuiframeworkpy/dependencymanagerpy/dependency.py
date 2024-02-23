@@ -22,7 +22,14 @@ class IndependentDependencyError(Exception):
 
 
 class Dependency:
-    def __init__(self, package, req_version: str, package_manager_cmd: str, version_flag: str = '--version', version_regex: str = r'(\d+\.\d+\.\d+)'):
+    def __init__(
+        self,
+        package,
+        req_version: str,
+        package_manager_cmd: str,
+        version_flag: str = '--version',
+        version_regex: str = r'(\d+\.\d+\.\d+)',
+    ):
         self.package = package
         self.req_version = Version(req_version)
         self.package_manager_cmd = package_manager_cmd
@@ -30,7 +37,6 @@ class Dependency:
         self.version_regex = version_regex
         self.installed = False
         self.up_to_date = False
-
 
     def install(self, upgrade: bool = False):
         args = []
@@ -52,7 +58,6 @@ class Dependency:
         except subprocess.CalledProcessError as cpe:
             raise DependencyInstallationError(self, args, cpe)
 
-
     def check(self) -> tuple[bool, bool]:
         args = []
         if self.package_manager_cmd == 'pip':
@@ -61,7 +66,9 @@ class Dependency:
             args = [self.package, self.version_flag]
 
         try:
-            current_version = re.findall(self.version_regex, subprocess.check_output(args).decode().strip())
+            current_version = re.findall(
+                self.version_regex, subprocess.check_output(args).decode().strip()
+            )
             if self.verbose:
                 print(f'    args: {args}')
                 print(f'    Current version: {current_version}')

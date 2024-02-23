@@ -1,8 +1,23 @@
 # preset consists of output file suffix, clone time, prefix name, csv file or default
 class ClonePreset:
-    __slots__ = ['folder_suffix', 'clone_time', 'name', 'csv_path', 'append_timestamp', 'clone_type']
+    __slots__ = [
+        'folder_suffix',
+        'clone_time',
+        'name',
+        'csv_path',
+        'append_timestamp',
+        'clone_type',
+    ]
 
-    def __init__(self, name, folder_suffix, clone_time, csv_path, append_timestamp, clone_type: tuple[int, int, int]):
+    def __init__(
+        self,
+        name,
+        folder_suffix,
+        clone_time,
+        csv_path,
+        append_timestamp,
+        clone_type: tuple[int, int, int],
+    ):
         self.name = name
         self.folder_suffix = folder_suffix
         self.clone_time = clone_time

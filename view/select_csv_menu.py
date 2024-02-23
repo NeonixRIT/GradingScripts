@@ -1,6 +1,14 @@
 import os
 
-from tuiframeworkpy import SubMenu, Event, MenuOption, LIGHT_GREEN, LIGHT_RED, CYAN, WHITE
+from tuiframeworkpy import (
+    SubMenu,
+    Event,
+    MenuOption,
+    LIGHT_GREEN,
+    LIGHT_RED,
+    CYAN,
+    WHITE,
+)
 from utils import clear
 
 
@@ -11,10 +19,20 @@ class SelectCSVMenu(SubMenu):
         self.student_csv_menu_quit = False
         self.context = context
 
-        separator = '/' if '/' in self.context.config_manager.config.students_csv else '\\'
-        current_default = self.context.config_manager.config.students_csv.split(separator)[-1]
+        separator = (
+            '/' if '/' in self.context.config_manager.config.students_csv else '\\'
+        )
+        current_default = self.context.config_manager.config.students_csv.split(
+            separator
+        )[-1]
         options = []
-        for i, file_name in enumerate([f'* {file}' if current_default == file else file for file in os.listdir('./data/csvs/') if file.endswith('.csv')]):
+        for i, file_name in enumerate(
+            [
+                f'* {file}' if current_default == file else file
+                for file in os.listdir('./data/csvs/')
+                if file.endswith('.csv')
+            ]
+        ):
             on_select = Event()
 
             def set_csv_values(bound_file_name=file_name):
@@ -22,10 +40,25 @@ class SelectCSVMenu(SubMenu):
                 self.__set_config_value('students_csv', './data/csvs/' + value)
 
             on_select += set_csv_values
-            menu_option = MenuOption(i + 1, f'{CYAN if file_name.replace("* ", "") == current_default else WHITE}{file_name}{WHITE}', on_select, Event(), Event(), False)
+            menu_option = MenuOption(
+                i + 1,
+                f'{CYAN if file_name.replace("* ", "") == current_default else WHITE}{file_name}{WHITE}',
+                on_select,
+                Event(),
+                Event(),
+                False,
+            )
             options.append(menu_option)
 
-        SubMenu.__init__(self, id, 'Select New CSV File', options, Event(), Event(), only_one_prompt=True)
+        SubMenu.__init__(
+            self,
+            id,
+            'Select New CSV File',
+            options,
+            Event(),
+            Event(),
+            only_one_prompt=True,
+        )
         self.prompt_string = f'Please enter a number {LIGHT_GREEN}({self.min_options}-{self.max_options}){WHITE} or {LIGHT_RED}q/quit{WHITE} to enter the value manually: '
         self.invalid_input_string = f'You entered an invalid option.\n\nPlease enter a number between {self.min_options} and {self.max_options}.\nPress enter to try again.'
 

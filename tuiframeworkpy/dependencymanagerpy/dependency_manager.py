@@ -3,6 +3,7 @@ from .colors import LIGHT_RED, WHITE
 from .dependency import Dependency
 from .dependency import DependencyInstallationError, IndependentDependencyError
 
+
 class DependencyManager:
     def __init__(self, dependencies: list[Dependency], verbose: bool = False):
         self.dependencies = dependencies
@@ -17,7 +18,9 @@ class DependencyManager:
                     print(f'Checking dependency: {dependency.package}')
                 installed, correct_version = dependency.check()
                 if not installed or not correct_version:
-                    print(f'{LIGHT_RED}WARNING: Dependency {dependency.package} is not installed or is not the correct version. Attempting to install...{WHITE}')
+                    print(
+                        f'{LIGHT_RED}WARNING: Dependency {dependency.package} is not installed or is not the correct version. Attempting to install...{WHITE}'
+                    )
                     dependency.install(correct_version)
         except IndependentDependencyError:
             # print(ide.message)

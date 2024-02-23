@@ -29,6 +29,7 @@ class BareGitHubAPIClient:
 
     def __request(self, url: str, params: dict = None):
         import requests
+
         url = f'{url}?{urlencode(params)}' if params else url
         return requests.get(url, headers=self.headers)
 
@@ -52,7 +53,9 @@ class BareGitHubAPIClient:
         return commits
 
     def get_repo(self, owner, repo_name, params: dict = None):
-        response = self.__request(f'https://api.github.com/repos/{owner}/{repo_name}', params)
+        response = self.__request(
+            f'https://api.github.com/repos/{owner}/{repo_name}', params
+        )
         if response.status_code != 200:
             return None
         return response.json(object_hook=lambda d: SimpleNamespace(**d))
@@ -82,29 +85,36 @@ def get_application_folder():
 
     home = pathlib.Path.home()
 
-    if sys.platform == "win32":
-        path = home / "AppData/Roaming"
-    elif sys.platform == "linux":
-        path = home / ".local/share"
-    elif sys.platform == "darwin":
-        path = home / "Library/Application Support"
+    if sys.platform == 'win32':
+        path = home / 'AppData/Roaming'
+    elif sys.platform == 'linux':
+        path = home / '.local/share'
+    elif sys.platform == 'darwin':
+        path = home / 'Library/Application Support'
 
     return path / 'GCISGradingScripts'
 
 
 def update(latest_version, cwd):
     python_path = sys.executable
-    os.execl(python_path, python_path, get_application_folder() / 'update.py', latest_version, cwd)
+    os.execl(
+        python_path,
+        python_path,
+        get_application_folder() / 'update.py',
+        latest_version,
+        cwd,
+    )
 
 
 def clear():
     print('\n' * 100)
-    print("\033c\033[3J\033[2J\033[0m\033[H" * 200)
+    print('\033c\033[3J\033[2J\033[0m\033[H' * 200)
     os.system('cls' if os.name == 'nt' else 'clear')
 
 
 def get_color_from_status(status) -> str:
     import versionmanagerpy
+
     if status == versionmanagerpy.versionmanager.Status.OUTDATED:
         return LIGHT_RED
     elif status == versionmanagerpy.versionmanager.Status.CURRENT:
@@ -116,19 +126,34 @@ def get_color_from_status(status) -> str:
 
 def print_release_changes_since_update(releases, current_version) -> None:
     from versionmanagerpy import version
+
     current_version = version.Version(current_version)
-    print(f'{LIGHT_GREEN}An upadate is available. {current_version} -> {releases[0].tag_name}{WHITE}')
+    print(
+        f'{LIGHT_GREEN}An upadate is available. {current_version} -> {releases[0].tag_name}{WHITE}'
+    )
     for release in list(releases)[::-1]:
         release_version = version.Version(release.tag_name)
         if release_version > current_version:
-            print(f'{LIGHT_GREEN}Version: {release_version}\nDescription:\n{release.body}\n{WHITE}')
+            print(
+                f'{LIGHT_GREEN}Version: {release_version}\nDescription:\n{release.body}\n{WHITE}'
+            )
 
 
 def bool_prompt(prompt: str, default_output: bool) -> bool:
     y_str = 'Y' if default_output else 'y'
     n_str = 'N' if not default_output else 'n'
-    result = input(f'{prompt} ({LIGHT_GREEN}{y_str}{WHITE}/{LIGHT_RED}{n_str}{WHITE}): ')
-    return default_output if not result else True if result.lower() == 'y' else False if result.lower() == 'n' else default_output
+    result = input(
+        f'{prompt} ({LIGHT_GREEN}{y_str}{WHITE}/{LIGHT_RED}{n_str}{WHITE}): '
+    )
+    return (
+        default_output
+        if not result
+        else True
+        if result.lower() == 'y'
+        else False
+        if result.lower() == 'n'
+        else default_output
+    )
 
 
 def print_updates(current_version: str, tui_instance):
@@ -146,15 +171,30 @@ def print_updates(current_version: str, tui_instance):
 def make_new_config() -> SimpleNamespace:
     token = input('Github Authentication Token: ')
     organization = input('Organization Name: ')
-    student_filename = input('Enter path of csv file containing username and name of students: ')
-    output_dir = pathlib.Path(input('Output directory for assignment files (`enter` for current directory): '))
+    student_filename = input(
+        'Enter path of csv file containing username and name of students: '
+    )
+    output_dir = pathlib.Path(
+        input('Output directory for assignment files (`enter` for current directory): ')
+    )
     if not output_dir:
         output_dir = pathlib.Path.cwd()
     while not pathlib.Path.is_dir(output_dir):
         print(f'Directory `{output_dir}` not found.')
-        output_dir = pathlib.Path(input('Output directory for assignment files (`enter` for current directory): '))
+        output_dir = pathlib.Path(
+            input(
+                'Output directory for assignment files (`enter` for current directory): '
+            )
+        )
 
-    values = {'token': token, 'organization': organization, 'students_csv': student_filename, 'out_dir': str(output_dir), 'presets': [], 'add_rollback': []}
+    values = {
+        'token': token,
+        'organization': organization,
+        'students_csv': student_filename,
+        'out_dir': str(output_dir),
+        'presets': [],
+        'add_rollback': [],
+    }
     values_formatted = json.dumps(values, indent=4)
     return json.loads(values_formatted, object_hook=lambda d: SimpleNamespace(**d))
 
