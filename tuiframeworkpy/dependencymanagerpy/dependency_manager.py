@@ -8,6 +8,10 @@ class DependencyManager:
     def __init__(self, dependencies: list[Dependency], verbose: bool = False):
         self.dependencies = dependencies
         self.verbose = verbose
+        self.update_verbose(verbose=verbose)
+
+    def update_verbose(self, verbose: bool):
+        self.verbose = verbose
         for dependency in self.dependencies:
             dependency.verbose = verbose
 

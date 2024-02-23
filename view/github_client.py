@@ -435,54 +435,116 @@ class GitHubAPIClient:
         assignment_name = await self.attempt_get_assignment()  # prompt and verify assignment name
         if assignment_name == 'quit()':
             return
+        # due_tag = ''
+        # if self.clone_via_tag:
+        #     due_tag = attempt_get_tag()
+
+        #     if preset.append_timestamp:
+        #         preset.folder_suffix += f'_{due_tag}'
 
         flags = preset.clone_type  # (class activity, assignment, exam)
         if preset.clone_type is None:
-            flags = self.get_student_flags()
+            for param in self.context.config_manager.config.extra_student_parameters:
+                if param.github in self.students:
+                    print(f'{LIGHT_GREEN}Student found in extra parameters.{WHITE}')
+                    res = input(f'Is this for a {LIGHT_GREEN}class activity(ca){WHITE}, {LIGHT_GREEN}assignment(as){WHITE}, or {LIGHT_GREEN}exam(ex){WHITE}? ')
+                    while res != 'ca' and res != 'as' and res != 'ex':
+                        res = input(f'Is this for a {LIGHT_GREEN}class activity(ca){WHITE}, {LIGHT_GREEN}assignment(as){WHITE}, or {LIGHT_GREEN}exam(ex){WHITE}? ')
+                    if res == 'ca':
+                        flags = (1, 0, 0)
+                    elif res == 'as':
+                        flags = (0, 1, 0)
+                    elif res == 'ex':
+                        flags = (0, 0, 1)
+                    break
 
         self.assignment_flags[assignment_name] = flags
 
         due_date = ''
+        # if not self.clone_via_tag:
         if not preset.clone_time:
             preset.clone_time = get_time()
 
-        due_date = self.get_due_date()
+        due_date = get_date()
+        while not check_date(due_date):
+            due_date = get_date()
 
         if preset.append_timestamp:
-            preset.folder_suffix = self.get_folder_suffix(preset.folder_suffix, due_date, preset.clone_time)
+            date_str = due_date[4:].replace('-', '_')
+            time_str = preset.clone_time.replace(':', '_')
+            preset.folder_suffix += f'_{date_str}_{time_str}'
+        # end if
 
-        parent_folder_path = self.get_parent_folder_path(assignment_name, preset.folder_suffix)
+        pull_start_1 = perf_counter()
+        i = 0
+        parent_folder_path = f'{self.context.config_manager.config.out_dir}/{assignment_name}{preset.folder_suffix}'  # prompt parent folder (IE assingment_name-AS in config.out_dir)
+        while Path(parent_folder_path).exists() and not self.context.config_manager.config.replace_clone_duplicates:
+            i += 1
+            parent_folder_path = f'{self.context.config_manager.config.out_dir}/{assignment_name}{preset.folder_suffix}_iter_{i}'
 
-        self.handle_duplicate_folders(parent_folder_path)
+        if Path(parent_folder_path).exists() and self.context.config_manager.config.replace_clone_duplicates and not self.context.dry_run:
+            for folder in os.listdir(parent_folder_path):
+                shutil.rmtree(f'{parent_folder_path}/{folder}')
 
-        self.create_parent_folder(parent_folder_path)
+        if not self.context.dry_run and not Path(parent_folder_path).exists():
+            os.mkdir(parent_folder_path)
+        pull_stop_1 = perf_counter()
 
         skip_flag = False
         while True:
+            pull_start_2 = perf_counter()
             repos = await self.get_repos(assignment_name, due_date, preset.clone_time, refresh=True)  # get repos for assignment
+            pull_stop_2 = perf_counter()
             if len(repos) > 0:
                 break
             if len(repos) == 0 and (len(self.assignment_students_no_commit) > 0 or len(self.assignment_students_not_accepted) > 0):
                 skip_flag = True
                 break
-            self.handle_no_students_accepted(assignment_name)
+            print(f'{LIGHT_RED}No students have accepted the assignment `{assignment_name}`.{WHITE}')
+            print('Please try again or type `quit()` to return to the clone menu.')
+            tmp_flags = self.assignment_flags[assignment_name]
+            del self.assignment_flags[assignment_name]
+            del self.assignment_repos[assignment_name]
+            del self.assignment_students_accepted[assignment_name]
+            del self.assignment_students_not_accepted[assignment_name]
+            del self.assignment_students_no_commit[assignment_name]
+            del self.assignment_output_log[assignment_name]
             assignment_name = await self.attempt_get_assignment()
             if assignment_name == 'quit()':
                 return
-            self.assignment_flags[assignment_name] = self.assignment_flags[assignment_name]
+            self.assignment_flags[assignment_name] = tmp_flags
 
-        self.print_output_directory(parent_folder_path, assignment_name)
+        print()
+
+        pull_start_3 = perf_counter()
+        outdir = parent_folder_path[len(self.context.config_manager.config.out_dir) + 1 :]
+        outdir_str = f'Output directory: {outdir}'
+        self.print_and_log(outdir_str, assignment_name)
         await self.pull_assignment_repos(assignment_name, parent_folder_path)
         if not skip_flag and not self.context.dry_run:
             await self.extract_data_folder(assignment_name, parent_folder_path)
-
-        pull_time = self.calculate_pull_time()
+        pull_stop_3 = perf_counter()
+        pull_time = (pull_stop_3 - pull_start_3) + (pull_stop_2 - pull_start_2) + (pull_stop_1 - pull_start_1)
 
         ellapsed_time = pull_time + students_time
         end_report_str = self.print_pull_report(assignment_name, ellapsed_time)
         self.assignment_output_log[assignment_name].append(end_report_str)
 
-        report = self.create_clone_report(assignment_name, due_date, preset.clone_time, students_path)
+        report = CloneReport(
+            assignment_name,
+            due_date,
+            preset.clone_time,
+            datetime.today().strftime('%Y-%m-%d'),
+            datetime.now().strftime('%H:%M'),
+            self.context.dry_run,
+            str(students_path),
+            tuple(self.assignment_output_log[assignment_name]),
+        )
 
         await self.save_report(report)
-        self.cleanup_assignment_data(assignment_name)
+        del self.assignment_repos[assignment_name]
+        del self.assignment_students_accepted[assignment_name]
+        del self.assignment_students_not_accepted[assignment_name]
+        del self.assignment_students_no_commit[assignment_name]
+        del self.assignment_output_log[assignment_name]
+        del self.assignment_flags[assignment_name]

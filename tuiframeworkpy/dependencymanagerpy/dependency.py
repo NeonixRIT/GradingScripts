@@ -43,7 +43,11 @@ class Dependency:
 
         sub_command = 'install' if not upgrade else 'upgrade'
         if self.package_manager_cmd == 'pip':
-            args = [sys.executable, '-m', 'pip', 'install', self.package, '--upgrade']
+            try:
+                subprocess.check_call(['uv', '--help'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                args = ['uv', 'pip', 'install', self.package]
+            except FileNotFoundError:
+                args = [sys.executable, '-m', 'pip', 'install', self.package, '--upgrade']
         else:
             args = [self.package_manager_cmd, sub_command, self.package]
 
@@ -56,17 +60,27 @@ class Dependency:
         try:
             subprocess.check_call(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         except subprocess.CalledProcessError as cpe:
-            raise DependencyInstallationError from cpe
+            raise DependencyInstallationError(self, args, cpe) from cpe
 
     def check(self) -> tuple[bool, bool]:
         args = []
+        is_uv = False
         if self.package_manager_cmd == 'pip':
-            args = [sys.executable, '-m', 'pip', 'show', self.package]
+            try:
+                subprocess.check_call(['uv', '--version'], stderr=subprocess.PIPE, stdout=subprocess.PIPE)
+                args = ['uv', 'pip', 'freeze']
+                is_uv = True
+            except FileNotFoundError:
+                args = [sys.executable, '-m', 'pip', 'show', self.package]
         else:
             args = [self.package, self.version_flag]
 
         try:
-            current_version = re.findall(self.version_regex, subprocess.check_output(args).decode().strip())
+            current_version = None
+            if is_uv:
+                current_version = re.findall(f'{self.package}=={self.version_regex}', subprocess.check_output(args).decode().strip())
+            else:
+                current_version = re.findall(self.version_regex, subprocess.check_output(args).decode().strip())
             if self.verbose:
                 print(f'    args: {args}')
                 print(f'    Current version: {current_version}')

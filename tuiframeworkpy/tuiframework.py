@@ -65,7 +65,12 @@ class TUI:
     def start(self) -> None:
         try:
             self.on_start()
+
+            self.context.config_manager.initialize()
+            self.context.dependency_manager.update_verbose(self.context.config_manager.config.debug)
             self.context.dependency_manager.check_and_install()
+            if self.context.config_manager.config.debug:
+                input('Press enter to continue...')
             from versionmanagerpy import versionmanager, VersionManager
 
             vm = VersionManager('NeonixRIT', 'GradingScripts', self.version)
@@ -82,11 +87,8 @@ class TUI:
             if self.update_instance:
                 exit()
 
-            self.context.config_manager.initialize()
-
             for menu in filter(lambda x: self.menus[x].preload, self.menus):
                 self.menus[menu].load()
-
             self.menus[0].open()
         except (ConnectionError, KeyboardInterrupt, Exception) as e:
             clear()
