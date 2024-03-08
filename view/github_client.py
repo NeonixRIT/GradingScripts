@@ -400,6 +400,20 @@ class GitHubAPIClient:
             clone_logs = clone_logs[1:]
         self.context.config_manager.set_config_value('clone_history', clone_logs)
 
+    async def create_vscode_workspace(self, assignment_name, parent_folder_path):
+        workspace_path = Path(parent_folder_path) / f'{assignment_name}.code-workspace'
+        with open(workspace_path, 'w') as f:
+            f.write('{\n')
+            f.write('    "folders": [\n')
+            for repo in self.assignment_repos[assignment_name]:
+                f.write(f'        {{ "path": "{repo.new_name}" }},\n')
+            f.write('    ],\n"settings": {}\n')
+            f.write('}\n')
+        self.print_and_log(
+            f'{LIGHT_GREEN}VSCode workspace file created at {workspace_path}.{WHITE}',
+            assignment_name,
+        )
+
     async def extract_data_folder(self, assignment_name, initial_path, data_folder_name='data'):
         repos = os.listdir(initial_path)
         repo_to_check = repos[len(repos) - 1]
@@ -484,7 +498,10 @@ class GitHubAPIClient:
 
         if Path(parent_folder_path).exists() and self.context.config_manager.config.replace_clone_duplicates and not self.context.dry_run:
             for folder in os.listdir(parent_folder_path):
-                shutil.rmtree(f'{parent_folder_path}/{folder}')
+                if (Path(parent_folder_path) / folder).is_dir():
+                    shutil.rmtree(Path(parent_folder_path) / folder)
+                else:
+                    os.remove(Path(parent_folder_path) / folder)
 
         if not self.context.dry_run and not Path(parent_folder_path).exists():
             os.mkdir(parent_folder_path)
@@ -529,6 +546,8 @@ class GitHubAPIClient:
         ellapsed_time = pull_time + students_time
         end_report_str = self.print_pull_report(assignment_name, ellapsed_time)
         self.assignment_output_log[assignment_name].append(end_report_str)
+        if not skip_flag and not self.context.dry_run:
+            await self.create_vscode_workspace(assignment_name, parent_folder_path)
 
         report = CloneReport(
             assignment_name,
