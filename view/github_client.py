@@ -405,7 +405,7 @@ class GitHubAPIClient:
         with open(workspace_path, 'w') as f:
             f.write('{\n')
             f.write('    "folders": [\n')
-            for repo in self.assignment_repos[assignment_name]:
+            for repo in sorted(list(self.assignment_repos[assignment_name]), key=lambda x: x.new_name):
                 f.write(f'        {{ "path": "{repo.new_name}" }},\n')
             f.write('    ],\n\t"settings": {}\n')
             f.write('}\n')
