@@ -407,7 +407,7 @@ class GitHubAPIClient:
             f.write('    "folders": [\n')
             for repo in self.assignment_repos[assignment_name]:
                 f.write(f'        {{ "path": "{repo.new_name}" }},\n')
-            f.write('    ],\n"settings": {}\n')
+            f.write('    ],\n\t"settings": {}\n')
             f.write('}\n')
         self.print_and_log(
             f'{LIGHT_GREEN}VSCode workspace file created at {workspace_path}.{WHITE}',
