@@ -51,9 +51,6 @@ class Dependency:
         else:
             args = [self.package_manager_cmd, sub_command, self.package]
 
-        if os.name != 'nt':
-            args = ['sudo'] + args
-
         if not self.package_manager_cmd:
             raise IndependentDependencyError(self)
 
@@ -68,7 +65,7 @@ class Dependency:
         if self.package_manager_cmd == 'pip':
             try:
                 subprocess.check_call(['uv', '--version'], stderr=subprocess.PIPE, stdout=subprocess.PIPE)
-                args = ['uv', 'pip', 'freeze']
+                args = ['uv', 'pip', 'freeze', '--color=never']
                 is_uv = True
             except FileNotFoundError:
                 args = [sys.executable, '-m', 'pip', 'show', self.package]

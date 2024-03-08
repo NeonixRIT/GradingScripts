@@ -7,6 +7,7 @@ from .event import Event
 from .enhanced_json_decoder import EnhancedJSONEncoder
 
 from pathlib import Path
+from threading import Thread
 from types import SimpleNamespace
 from typing import Any, Iterable
 
@@ -26,6 +27,7 @@ class ConfigManager:
         'on_config_save',
         'on_config_read',
         'on_config_verify',
+        'depends_loaded'
     ]
 
     def __init__(self, config_path: str, config_entries: list[ConfigEntry] = None):
@@ -57,6 +59,7 @@ class ConfigManager:
             self.friendly_names_dict[entry.name] = entry.friendly_name
             self.default_config_dict[entry.name] = entry.default_value
             self.name_to_entry[entry.name] = entry
+        self.depends_loaded = False
 
     def __str__(self) -> str:
         result = ''
@@ -81,13 +84,25 @@ class ConfigManager:
         else:
             self.read_config()
 
+    def __verify_on_depends_loaded(self):
+        from time import sleep
+        while True:
+            if self.depends_loaded:
+                self.verify_config()
+                break
+            sleep(0.5)
+
+
     def read_config(self) -> SimpleNamespace:
         config = json.loads(
             Path(self.config_path).read_text(),
             object_hook=lambda d: SimpleNamespace(**d),
         )
         self.config = config
-        self.verify_config()
+        if self.depends_loaded:
+            self.verify_config()
+        else:
+            Thread(target=self.__verify_on_depends_loaded).start()
 
     def save_config(self):
         self.verify_config()

@@ -69,6 +69,7 @@ class TUI:
             self.context.config_manager.initialize()
             self.context.dependency_manager.update_verbose(self.context.config_manager.config.debug)
             self.context.dependency_manager.check_and_install()
+            self.context.config_manager.depends_loaded = True
             if self.context.config_manager.config.debug:
                 input('Press enter to continue...')
             from versionmanagerpy import versionmanager, VersionManager
