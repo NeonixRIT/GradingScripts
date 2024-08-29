@@ -97,7 +97,7 @@ class GitHubAPIClient:
         if not auth_token:
             del self.headers['Authorization']
 
-        self.repo_params = {'q': f'org:{self.__organization} forks:true', 'per_page': 100}
+        self.repo_params = {'q': f'org:{self.__organization} fork:true', 'per_page': 100}
 
         self.commit_params = {'per_page': 1, 'page': 1}
 
