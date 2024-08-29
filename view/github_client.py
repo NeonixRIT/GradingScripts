@@ -9,7 +9,7 @@ from .clone_report import CloneReport
 from .student_param import StudentParam
 
 from utils import bool_prompt, run
-from tuiframeworkpy import LIGHT_RED, LIGHT_GREEN, WHITE
+from tuiframeworkpy import LIGHT_RED, LIGHT_GREEN, WHITE, CYAN
 
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -97,7 +97,7 @@ class GitHubAPIClient:
         if not auth_token:
             del self.headers['Authorization']
 
-        self.repo_params = {'q': f'org:{self.__organization}', 'per_page': 100}
+        self.repo_params = {'q': f'org:{self.__organization} forks:true', 'per_page': 100}
 
         self.commit_params = {'per_page': 1, 'page': 1}
 
@@ -496,12 +496,18 @@ class GitHubAPIClient:
             i += 1
             parent_folder_path = f'{self.context.config_manager.config.out_dir}/{assignment_name}{preset.folder_suffix}_iter_{i}'
 
-        if Path(parent_folder_path).exists() and self.context.config_manager.config.replace_clone_duplicates and not self.context.dry_run:
-            for folder in os.listdir(parent_folder_path):
-                if (Path(parent_folder_path) / folder).is_dir():
-                    shutil.rmtree(Path(parent_folder_path) / folder)
-                else:
-                    os.remove(Path(parent_folder_path) / folder)
+        if Path(parent_folder_path).exists() and self.context.config_manager.config.replace_clone_duplicates:
+            if self.context.dry_run:
+                num_files = len(os.listdir(parent_folder_path))
+                print(f'{CYAN}[INFO]: Would have deleted {num_files} files/folders in {parent_folder_path}.{WHITE}')
+            else:
+                num_files = len(os.listdir(parent_folder_path))
+                print(f'{CYAN}[INFO]: Will delete {num_files} files/folders in {parent_folder_path}.{WHITE}')
+                for folder in os.listdir(parent_folder_path):
+                    if (Path(parent_folder_path) / folder).is_dir():
+                        shutil.rmtree(Path(parent_folder_path) / folder)
+                    else:
+                        os.remove(Path(parent_folder_path) / folder)
 
         if not self.context.dry_run and not Path(parent_folder_path).exists():
             os.mkdir(parent_folder_path)

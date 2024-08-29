@@ -87,6 +87,7 @@ def get_application_folder():
 
 def main():
     # Get application folder path
+    # This is where the update script is copied to
     app_folder = get_application_folder()
 
     # Enable Color if using Windows
@@ -154,7 +155,7 @@ def main():
     # Create TUI
     tui = TUI(VERSION, [git, requests], 'data/config.json', config_entries, default_paths)
 
-    # Add Custom Verify Methods
+    # Register Custom Verify Methods
     tui.context.config_manager += verify_token_org
     tui.context.config_manager += verify_presets
 
