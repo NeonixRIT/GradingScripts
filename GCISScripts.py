@@ -22,7 +22,7 @@ from view import (
     GitHubAPIClient,
 )
 
-VERSION = '2.2.5'
+VERSION = '2.3.0'
 
 
 def verify_token_org(config) -> set:
