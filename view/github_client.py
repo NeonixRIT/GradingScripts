@@ -120,15 +120,12 @@ class GitHubAPIClient:
         Check if auth token is valid
         """
         import requests
+        import orjson
 
         org_url = f'https://api.github.com/orgs/{self.__organization}'
         try:
             response = requests.get(org_url, headers=self.headers, timeout=10)
-            org_auth = getattr(
-                response.json(object_hook=lambda d: SimpleNamespace(**d)),
-                'total_private_repos',
-                False,
-            )
+            org_auth = orjson.loads(response.content).get('total_private_repos', False)
             if not org_auth:
                 return False, response.status_code
         except TimeoutError:
@@ -139,6 +136,7 @@ class GitHubAPIClient:
         """
         Check if assignment exists
         """
+        import orjson
         if not assignment_name:
             return True, -1
         params = dict(self.repo_params)
@@ -148,10 +146,10 @@ class GitHubAPIClient:
         response = await self.__async_request(url, params)
         if response.status_code != 200:
             return False, 0
-        repo_json = response.json(object_hook=lambda d: SimpleNamespace(**d))
-        if getattr(repo_json, 'total_count', 0) == 0:
+        repo_json = orjson.loads(response.content)
+        if repo_json.get('total_count', 0) == 0:
             return False, 0
-        return True, repo_json.total_count
+        return True, repo_json['total_count']
 
     def print_and_log(self, message: str, assignment_name: str, color: str = WHITE):
         print(f'{color}{message}{WHITE}')
@@ -163,13 +161,13 @@ class GitHubAPIClient:
         return requests.get(f'{url}?{urlencode(params)}', headers=self.headers)
 
     def __get_adjusted_due_datetime(self, repo, due_date: str, due_time: str) -> tuple:
-        pull_flags = self.assignment_flags[repo.assignment_name]
+        pull_flags = self.assignment_flags[repo['assignment_name']]
         is_ca = pull_flags[0]
         is_as = pull_flags[1]
         is_ex = pull_flags[2]
         student_params = StudentParam('', '', 0, 0, 0)
         for student in self.context.config_manager.config.extra_student_parameters:
-            if repo.name.endswith(student.github):
+            if repo['name'].endswith(student.github):
                 student_params = student
                 break
 
@@ -195,8 +193,9 @@ class GitHubAPIClient:
         return date_due_tmp, time_due_tmp
 
     async def __get_push_info(self, repo, due_date, due_time) -> tuple[str, int]:
+        import orjson
         params = dict(self.push_params)
-        params['actor'] = repo.student_github
+        params['actor'] = repo['student_github']
 
         due_date, due_time = self.__get_adjusted_due_datetime(repo, due_date, due_time)
         due_datetime = datetime.strptime(f'{due_date} {due_time}', '%Y-%m-%d %H:%M') - timedelta(hours=UTC_OFFSET)
@@ -205,44 +204,47 @@ class GitHubAPIClient:
         if is_dst_diff:
             due_datetime -= timedelta(hours=time_diff)
         due_datetime = due_datetime + timedelta(minutes=1)
-        response = await self.__async_request(f'{repo.url}/activity' , params)
+        url = f'{repo["url"]}/activity'
+        response = await self.__async_request(url , params)
         if response.status_code != 200:
             return None, None
-        pushes = response.json(object_hook=lambda d: SimpleNamespace(**d))
+        pushes = orjson.loads(response.content)
         page_limit = get_page_by_rel(response.headers['link'], 'last') if 'link' in response.headers else 1
         for page in range(2, page_limit + 1):
             params['page'] = page
-            response = await self.__async_request(f'{repo.url}/activity', params)
-            pushes.extend(response.json(object_hook=lambda d: SimpleNamespace(**d)))
+            response = await self.__async_request(url, params)
+            pushes.extend(orjson.loads(response.content))
 
         push_count = len(pushes)
         for push in pushes:
-            push_time = datetime.strptime(push.timestamp, '%Y-%m-%dT%H:%M:%SZ')
+            push_time = datetime.strptime(push['timestamp'], '%Y-%m-%dT%H:%M:%SZ')
             if push_time < due_datetime:
-                return push.after, push_count
+                return push['after'], push_count
         return None, push_count
 
     async def __poll_repos_page(self, params: dict, page: int):
+        import orjson
         params['page'] = page
         url = f'https://api.github.com/search/repositories?{urlencode(params)}'
         response = await self.__async_request(url, params)
         if response.status_code != 200:
             return False
-        return response.json(object_hook=lambda d: SimpleNamespace(**d)).items
+
+        return orjson.loads(response.content)['items']
 
     async def __add_valid_repos(self, assignment_name: str, due_date: str, due_time: str, repos: list):
         for repo in repos:
-            student_github = repo.name.replace(f'{assignment_name}-', '')
+            student_github = repo['name'].replace(f'{assignment_name}-', '')
             if student_github not in self.students:
                 continue
             student_name = self.students[student_github]
-            repo.student_name = student_name
-            repo.student_github = student_github
-            repo.new_name = repo.name.replace(student_github, student_name)
-            repo.assignment_name = assignment_name
+            repo['student_name'] = student_name
+            repo['student_github'] = student_github
+            repo['new_name'] = repo['name'].replace(student_github, student_name)
+            repo['assignment_name'] = assignment_name
             self.assignment_students_accepted[assignment_name].add((student_name, student_github))
             commit_hash, push_count = await self.__get_push_info(repo, due_date, due_time)
-            repo.due_commit_hash = commit_hash
+            repo['due_commit_hash'] = commit_hash
             if push_count <= 0:
                 self.assignment_students_no_commit[assignment_name].add((student_name, student_github))
                 continue
@@ -258,14 +260,14 @@ class GitHubAPIClient:
         try:
             # run process on system that executes 'git reset' command. stdout is redirected so it doesn't output to end user
             # git reset is similar to checkout but doesn't care about detached heads and is more forceful
-            cmd = f'git reset --hard {repo.due_commit_hash}'
+            cmd = f'git reset --hard {repo["due_commit_hash"]}'
             if not self.context.dry_run:
-                await run(cmd, repo.local_path)
-            repo.is_rolled_back = True
+                await run(cmd, repo['local_path'])
+            repo['is_rolled_back'] = True
         except Exception:
             self.print_and_log(
-                f'{LIGHT_RED}[{repo.name}] Rollback Failed: Likely invalid filename at commit `{repo.due_commit_hash}`.{WHITE}',
-                repo.assignment_name,
+                f'{LIGHT_RED}[{repo["name"]}] Rollback Failed: Likely invalid filename at commit `{repo["due_commit_hash"]}`.{WHITE}',
+                repo['assignment_name'],
             )
 
     async def get_repos(self, assignment_name: str, due_date: str, due_time: str, refresh: bool = False):
@@ -273,6 +275,7 @@ class GitHubAPIClient:
         Return all repos that have at least one commit before due date/time
         and are from students in class roster and are only for the desired assignment
         """
+        import orjson
         params = dict(self.repo_params)
         if assignment_name in self.assignment_repos and not refresh:
             return self.assignment_repos[assignment_name]
@@ -293,7 +296,7 @@ class GitHubAPIClient:
         if 'link' in response.headers:
             page_limit = get_page_by_rel(response.headers['link'], 'last')
 
-        repos = response.json(object_hook=lambda d: SimpleNamespace(**d)).items
+        repos = orjson.loads(response.content)['items']
         await self.__add_valid_repos(assignment_name, due_date, due_time, repos)
         for page in range(2, page_limit + 1):
             repos = await self.__poll_repos_page(params, page)
@@ -306,16 +309,16 @@ class GitHubAPIClient:
         return self.assignment_repos[assignment_name]
 
     async def __clone_repo(self, repo, path: Path):
-        destination_path = f'{path}/{repo.new_name}'
-        clone_str = f'    > Cloning [{repo.name}] {repo.new_name}...'
-        self.print_and_log(clone_str, repo.assignment_name)  # tell end user what repo is being cloned and where it is going to
+        destination_path = f'{path}/{repo["new_name"]}'
+        clone_str = f'    > Cloning [{repo["name"]}] {repo["new_name"]}...'
+        self.print_and_log(clone_str, repo['assignment_name'])  # tell end user what repo is being cloned and where it is going to
         # outputs_log.append(clone_str)
         # run process on system that executes 'git clone' command. stdout is redirected so it doesn't output to end user
-        clone_url = repo.clone_url.replace('https://', f'https://{self.__auth_token}@')
+        clone_url = repo['clone_url'].replace('https://', f'https://{self.__auth_token}@')
         cmd = f'git clone --single-branch {clone_url} "{destination_path}"'  # if not due_tag else f'git clone --branch {due_tag} --single-branch {clone_url} "{destination_path}"'
         if not self.context.dry_run:
             await run(cmd)
-        repo.local_path = destination_path
+        repo['local_path'] = destination_path
         await self.__rollback_repo(repo)
 
     async def pull_assignment_repos(self, assignment_name: str, path: Path | str):
@@ -360,9 +363,9 @@ class GitHubAPIClient:
         cloned_num = 0
         rolled_back_num = 0
         for repo in self.assignment_repos[assignment_name]:
-            if getattr(repo, 'local_path', False):
+            if repo.get('local_path', False):
                 cloned_num += 1
-            if getattr(repo, 'is_rolled_back', False):
+            if repo.get('is_rolled_back', False):
                 rolled_back_num += 1
 
         clone_str = f'{LIGHT_GREEN}{cloned_num}{WHITE}' if cloned_num == total_assignment_repos else f'{LIGHT_RED}{cloned_num}{WHITE}'
@@ -410,8 +413,9 @@ class GitHubAPIClient:
         with open(workspace_path, 'w') as f:
             f.write('{\n')
             f.write('    "folders": [\n')
-            for repo in sorted(list(self.assignment_repos[assignment_name]), key=lambda x: x.new_name):
-                f.write(f'        {{ "path": "{repo.new_name}" }},\n')
+            for repo in sorted(list(self.assignment_repos[assignment_name]), key=lambda x: x['new_name']):
+                val = repo['new_name']
+                f.write(f'        {{ "path": "{val}" }},\n')
             f.write('    ],\n\t"settings": {}\n')
             f.write('}\n')
         self.print_and_log(

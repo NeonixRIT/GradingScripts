@@ -100,6 +100,7 @@ def main():
     # Define Dependencies
     git = Dependency('git', '2.30', '')
     requests = Dependency('requests', '2.31.0', 'pip')
+    orjson = Dependency('orjson', '3.10.0', 'pip')
 
     # Define Config Entries
     token_entry = ConfigEntry(
@@ -153,7 +154,7 @@ def main():
     default_paths = ['./data', './data/csvs', './data/files_to_add', str(app_folder)]
 
     # Create TUI
-    tui = TUI(VERSION, [git, requests], 'data/config.json', config_entries, default_paths)
+    tui = TUI(VERSION, [git, requests, orjson], 'data/config.json', config_entries, default_paths)
 
     # Register Custom Verify Methods
     tui.context.config_manager += verify_token_org
