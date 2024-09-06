@@ -99,6 +99,7 @@ class GitHubAPIClient:
 
         self.repo_params = {'q': f'org:{self.__organization} fork:true', 'per_page': 100}
 
+        self.push_params = {'activity_type': 'push,force_push', 'order': 'desc', 'per_page': 100, 'page': 1}
         self.commit_params = {'per_page': 1, 'page': 1}
 
         self.assignment_repos = {}
@@ -193,28 +194,33 @@ class GitHubAPIClient:
             time_due_tmp = due_time
         return date_due_tmp, time_due_tmp
 
-    async def __get_commit_info(self, repo, due_date, due_time):
-        params = dict(self.commit_params)
-        if not due_date:
-            pass
-        if not due_time:
-            pass
+    async def __get_push_info(self, repo, due_date, due_time) -> tuple[str, int]:
+        params = dict(self.push_params)
+        params['actor'] = repo.student_github
+
         due_date, due_time = self.__get_adjusted_due_datetime(repo, due_date, due_time)
         due_datetime = datetime.strptime(f'{due_date} {due_time}', '%Y-%m-%d %H:%M') - timedelta(hours=UTC_OFFSET)
         time_diff = due_datetime.hour - due_datetime.astimezone(CURRENT_TIMEZONE).hour
         is_dst_diff = time_diff != 0
         if is_dst_diff:
             due_datetime -= timedelta(hours=time_diff)
-        params['until'] = due_datetime.strftime('%Y-%m-%dT%H:%M:%SZ')
-        response = await self.__async_request(repo.commits_url[:-6], params)
+        due_datetime = due_datetime + timedelta(minutes=1)
+        response = await self.__async_request(f'{repo.url}/activity' , params)
         if response.status_code != 200:
             return None, None
-        commit_json = response.json(object_hook=lambda d: SimpleNamespace(**d))
-        if not commit_json:
-            return None, None
-        commit_hash = getattr(commit_json[0], 'sha', None)
-        commit_num = get_page_by_rel(response.headers['link'], 'last') if 'link' in response.headers else 1
-        return commit_hash, commit_num
+        pushes = response.json(object_hook=lambda d: SimpleNamespace(**d))
+        page_limit = get_page_by_rel(response.headers['link'], 'last') if 'link' in response.headers else 1
+        for page in range(2, page_limit + 1):
+            params['page'] = page
+            response = await self.__async_request(f'{repo.url}/activity', params)
+            pushes.extend(response.json(object_hook=lambda d: SimpleNamespace(**d)))
+
+        push_count = len(pushes)
+        for push in pushes:
+            push_time = datetime.strptime(push.timestamp, '%Y-%m-%dT%H:%M:%SZ')
+            if push_time < due_datetime:
+                return push.after, push_count
+        return None, push_count
 
     async def __poll_repos_page(self, params: dict, page: int):
         params['page'] = page
@@ -235,14 +241,13 @@ class GitHubAPIClient:
             repo.new_name = repo.name.replace(student_github, student_name)
             repo.assignment_name = assignment_name
             self.assignment_students_accepted[assignment_name].add((student_name, student_github))
-            commit_hash, commit_count = await self.__get_commit_info(repo, due_date, due_time)
+            commit_hash, push_count = await self.__get_push_info(repo, due_date, due_time)
             repo.due_commit_hash = commit_hash
-            repo.due_commit_count = commit_count
-            if commit_hash is None or commit_count is None:
-                self.assignment_students_not_accepted[assignment_name].add((student_name, student_github))
-                continue
-            if commit_count <= 1:
+            if push_count <= 0:
                 self.assignment_students_no_commit[assignment_name].add((student_name, student_github))
+                continue
+            if commit_hash is None:
+                self.assignment_students_not_accepted[assignment_name].add((student_name, student_github))
                 continue
             self.assignment_repos[assignment_name].append(repo)
 
