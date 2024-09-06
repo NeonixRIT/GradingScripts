@@ -419,10 +419,9 @@ class GitHubAPIClient:
         repo_to_check = repos[len(repos) - 1]
         folders = os.listdir(Path(initial_path) / repo_to_check)
         if data_folder_name in folders:
-            shutil.move(
-                f'{str(Path(initial_path) / repo_to_check)}/{data_folder_name}',
-                initial_path,
-            )
+            shutil.copytree(
+                f'{str(Path(initial_path) / repo_to_check / data_folder_name)}',
+                f'{str(Path(initial_path) / data_folder_name)}')
             self.print_and_log(
                 f'{LIGHT_GREEN}Data folder extracted to the output directory.{WHITE}',
                 assignment_name,
