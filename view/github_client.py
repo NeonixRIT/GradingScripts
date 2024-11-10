@@ -160,12 +160,12 @@ class GitHubAPIClient:
         """
         Check if auth token is valid
         """
-        import requests
+        import httpx
         import orjson
 
         org_url = f'https://api.github.com/orgs/{self.__organization}'
         try:
-            response = requests.get(org_url, headers=self.headers, timeout=10)
+            response = httpx.get(org_url, headers=self.headers, timeout=10)
             org_auth = orjson.loads(response.content).get('total_private_repos', False)
             if not org_auth:
                 return False, response.status_code

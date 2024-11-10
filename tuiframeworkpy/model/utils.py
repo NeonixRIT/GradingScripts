@@ -28,10 +28,10 @@ class BareGitHubAPIClient:
         }
 
     def __request(self, url: str, params: dict = None):
-        import requests
+        import httpx
 
         url = f'{url}?{urlencode(params)}' if params else url
-        return requests.get(url, headers=self.headers)
+        return httpx.get(url, headers=self.headers)
 
     def get_commits(self, repo, params: dict = None):
         if repo is None:
