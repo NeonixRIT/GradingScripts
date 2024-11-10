@@ -11,13 +11,15 @@ from .student_param import StudentParam
 from utils import bool_prompt, run
 from tuiframeworkpy import LIGHT_RED, LIGHT_GREEN, WHITE, CYAN
 
+from copy import deepcopy
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
+from pprint import pformat
 from time import perf_counter
-from types import SimpleNamespace
+from traceback import TracebackException
+from types import SimpleNamespace, ModuleType
 from urllib.parse import urlencode
 
-LOG_FILE_PATH = './data/logs.log'
 UTC_OFFSET = datetime.now(timezone.utc).astimezone().utcoffset() // timedelta(hours=1)
 CURRENT_TIMEZONE = timezone(timedelta(hours=UTC_OFFSET))
 
@@ -51,28 +53,59 @@ def get_students(student_filename: str) -> dict:
     return students  # return dict mapping names to github usernames
 
 
+def pformat_objects(x):
+    try:
+        copy = deepcopy(x)
+        try:
+            del copy['__builtins__']
+        except Exception:
+            pass
+        if isinstance(copy, dict):
+            for val in copy:
+                if isinstance(copy[val], (str, int, bool, tuple, list, float, set, complex)):
+                    continue
+                copy[val] = getattr(copy[val], '__dict__', repr(copy[val]))
+            return pformat(copy)
+        elif isinstance(copy, (str, int, bool, tuple, list, float, set, complex)):
+            return pformat(copy)
+        else:
+            return pformat(vars(copy))
+    except Exception:
+        try:
+            copyd = dict(x)
+            del copyd['__builtins__']
+            return pformat(copyd)
+        except Exception:
+            pass
+        return pformat(x)
+
+
 def get_time():
     """
     Get assignment due time from input.
     """
-    time_due = input('Time Due (24hr, press `enter` for current): ')  # get time assignment was due
+    current = False
+    time_due = input('Time Due (24hr HH:MM, press `enter` for current): ')  # get time assignment was due
     if not time_due:  # if time due is blank use current time
+        current = True
         current_time = datetime.now()  # get current time
         time_due = current_time.strftime('%H:%M')  # format current time into hour:minute 24hr format
         print(f'Using current time: {time_due}')  # output what is being used to end user
-    return time_due
+    return current, time_due
 
 
 def get_date():
     """
     Get assignment due date from input.
     """
+    current = False
     date_due = input('Date Due (format = yyyy-mm-dd, press `enter` for current): ')  # get due date
     if not date_due:  # If due date is blank use current date
+        current = True
         current_date = date.today()  # get current date
         date_due = current_date.strftime('%Y-%m-%d')  # get current date in year-month-day format
         print(f'Using current date: {date_due}')  # output what is being used to end user
-    return date_due
+    return current, date_due
 
 
 def check_date(date_inp: str):
@@ -114,6 +147,14 @@ class GitHubAPIClient:
         if self.context is not None:
             self.students = get_students(self.context.config_manager.config.students_csv)
             self.loaded_csv = self.context.config_manager.config.students_csv
+        self.log_file_handler = None
+        self.clone_log = []
+        self.reset_log = []
+        self.current_pull = False
+        self.session = None
+
+    def __repr__(self):
+        return pformat_objects(self.__dict__).replace(self.context.config_manager.config.token, 'REDACTED')
 
     def is_authorized(self) -> tuple:
         """
@@ -156,9 +197,16 @@ class GitHubAPIClient:
         self.assignment_output_log[assignment_name].append(message)
 
     async def __async_request(self, url: str, params: dict = None):
-        import requests
+        import httpx
+        if self.session is None:
+            self.session = httpx.AsyncClient()
 
-        return requests.get(f'{url}?{urlencode(params)}', headers=self.headers)
+        response = await self.session.get(f'{url}?{urlencode(params)}', headers=self.headers)
+        if self.log_file_handler is not None:
+            self.log_file_handler.write('*** ASYNC REQUEST ***\n')
+            self.log_file_handler.write(f'{pformat_objects(locals())}\n'.replace(self.context.config_manager.config.token, 'REDACTED'))
+            self.log_file_handler.write(f'{pformat_objects(response)}\n\n\n'.replace(self.context.config_manager.config.token, 'REDACTED'))
+        return response
 
     def __get_adjusted_due_datetime(self, repo, due_date: str, due_time: str) -> tuple:
         pull_flags = self.assignment_flags[repo['assignment_name']]
@@ -192,35 +240,56 @@ class GitHubAPIClient:
             time_due_tmp = due_time
         return date_due_tmp, time_due_tmp
 
+    def __get_commit_from_push(self, due_datetime: datetime, pushes: dict) -> str:
+        for push in pushes:
+            push_time = datetime.strptime(push['timestamp'], '%Y-%m-%dT%H:%M:%SZ')
+            if push_time < due_datetime:
+                return push['after']
+        return None
+
     async def __get_push_info(self, repo, due_date, due_time) -> tuple[str, int]:
         import orjson
         params = dict(self.push_params)
         params['actor'] = repo['student_github']
 
-        due_date, due_time = self.__get_adjusted_due_datetime(repo, due_date, due_time)
-        due_datetime = datetime.strptime(f'{due_date} {due_time}', '%Y-%m-%d %H:%M') - timedelta(hours=UTC_OFFSET)
-        time_diff = due_datetime.hour - due_datetime.astimezone(CURRENT_TIMEZONE).hour
+        due_date, due_time = self.__get_adjusted_due_datetime(repo, due_date, due_time) # adjust based on student parameters
+        due_datetime = datetime.strptime(f'{due_date} {due_time}', '%Y-%m-%d %H:%M') - timedelta(hours=UTC_OFFSET) # convert to UTC
+        time_diff = due_datetime.hour - due_datetime.astimezone(CURRENT_TIMEZONE).hour # check if current time's Daylight Savings Time is different from due date/time
         is_dst_diff = time_diff != 0
         if is_dst_diff:
             due_datetime -= timedelta(hours=time_diff)
+        # want to get pushes that happened before due date/time, so add a minute to due date/time
         due_datetime = due_datetime + timedelta(minutes=1)
+        # GitHub API {owner}/{repo}/activity endpoint allows to query all pushes for a repo by a user
         url = f'{repo["url"]}/activity'
+        # get first 100 pushes to a repository by a user
         response = await self.__async_request(url , params)
         if response.status_code != 200:
             return None, None
+        # get list of pushes from json response
+        # use orjson for faster json parsing
         pushes = orjson.loads(response.content)
+        num_pushes = len(pushes)
+        # get commit hash from push that happened before due date/time
+        commit_hash = self.__get_commit_from_push(due_datetime, pushes)
+        if commit_hash is not None:
+            return commit_hash, num_pushes
+
+        # If there are more than 100 pushes and a push time before the due date/time was not found
+        # proceed to get and process the rest of the pushes in batches of 100
         page_limit = get_page_by_rel(response.headers['link'], 'last') if 'link' in response.headers else 1
+        # if there is only one page of pushes, return None, meaning no push was found before due date/time
+        # meaning the student either did not create the repo (accept the assignment) or did not push any commits
+        # the loop is likely never run as pushing more that 100 times is rare.
         for page in range(2, page_limit + 1):
             params['page'] = page
             response = await self.__async_request(url, params)
-            pushes.extend(orjson.loads(response.content))
-
-        push_count = len(pushes)
-        for push in pushes:
-            push_time = datetime.strptime(push['timestamp'], '%Y-%m-%dT%H:%M:%SZ')
-            if push_time < due_datetime:
-                return push['after'], push_count
-        return None, push_count
+            pushes = orjson.loads(response.content)
+            commit_hash = self.__get_commit_from_push(due_datetime, pushes)
+            if commit_hash is not None:
+                return commit_hash, num_pushes + len(pushes)
+            num_pushes += len(pushes)
+        return None, num_pushes
 
     async def __poll_repos_page(self, params: dict, page: int):
         import orjson
@@ -243,7 +312,9 @@ class GitHubAPIClient:
             repo['new_name'] = repo['name'].replace(student_github, student_name)
             repo['assignment_name'] = assignment_name
             self.assignment_students_accepted[assignment_name].add((student_name, student_github))
-            commit_hash, push_count = await self.__get_push_info(repo, due_date, due_time)
+            commit_hash, push_count = "-1", 1
+            if not self.current_pull:
+                commit_hash, push_count = await self.__get_push_info(repo, due_date, due_time)
             repo['due_commit_hash'] = commit_hash
             if push_count <= 0:
                 self.assignment_students_no_commit[assignment_name].add((student_name, student_github))
@@ -261,8 +332,9 @@ class GitHubAPIClient:
             # run process on system that executes 'git reset' command. stdout is redirected so it doesn't output to end user
             # git reset is similar to checkout but doesn't care about detached heads and is more forceful
             cmd = f'git reset --hard {repo["due_commit_hash"]}'
-            if not self.context.dry_run:
-                await run(cmd, repo['local_path'])
+            stdout, stderr, exitcode = (await run(cmd, repo['local_path']))
+            if self.context.config_manager.config.debug:
+                self.reset_log.append(f'*** ROLLBACK REPO [{repo["name"]}] ***\n{stdout}\n{stderr}\n{exitcode=}\n')
             repo['is_rolled_back'] = True
         except Exception:
             self.print_and_log(
@@ -316,10 +388,31 @@ class GitHubAPIClient:
         # run process on system that executes 'git clone' command. stdout is redirected so it doesn't output to end user
         clone_url = repo['clone_url'].replace('https://', f'https://{self.__auth_token}@')
         cmd = f'git clone --single-branch {clone_url} "{destination_path}"'  # if not due_tag else f'git clone --branch {due_tag} --single-branch {clone_url} "{destination_path}"'
+        if self.current_pull:
+            cmd = f'git clone --single-branch --depth 1 {clone_url} "{destination_path}"'
         if not self.context.dry_run:
-            await run(cmd)
+            # If a repo fails to clone, automatically retry once, if it fails again, alert and ask user if they want to retry
+            # logging not addiquate here. All instances don't add to log or are overwritten by others in race condition?
+            stdout, stderr, exitcode = (await run(cmd))
+            if self.context.config_manager.config.debug:
+                self.clone_log.append(f'*** CLONE REPO [{repo["name"]}] ***\n{stdout}\n{stderr}\n{exitcode=}\n')
+            if exitcode != 0:
+                stdout, stderr, exitcode = (await run(cmd))
+                if self.context.config_manager.config.debug:
+                    self.clone_log.append(f'*** CLONE REPO [{repo["name"]}] ***\n{stdout}\n{stderr}\n{exitcode=}\n')
+                if exitcode != 0:
+                    self.print_and_log(
+                        f'{LIGHT_RED}[{repo["name"]}] Clone Failed again for the following reason:\n{stderr}\n{WHITE}',
+                        repo['assignment_name'],
+                    )
+                while exitcode != 0 and bool_prompt('Would you like to retry?', True):
+                    stdout, stderr, exitcode = await run(cmd)
+                    if self.context.config_manager.config.debug:
+                        self.clone_log.append(f'*** CLONE REPO [{repo["name"]}] ***\n{stdout}\n{stderr}\n{exitcode=}\n')
         repo['local_path'] = destination_path
-        await self.__rollback_repo(repo)
+        # if a current pull, dont roll back. If dry run, don't roll back
+        if not self.current_pull and not self.context.dry_run:
+            await self.__rollback_repo(repo)
 
     async def pull_assignment_repos(self, assignment_name: str, path: Path | str):
         """
@@ -379,7 +472,8 @@ class GitHubAPIClient:
         print(full_accept_str)
         print(full_commits_str)
         print(full_clone_str)
-        print(full_rolled_back_str)
+        if not self.context.dry_run or not self.current_pull:
+            print(full_rolled_back_str)
         print()
 
         full_report_str = f'\n{done_str}\n{full_accept_str}\n{full_commits_str}\n{full_clone_str}\n{full_rolled_back_str}'
@@ -484,12 +578,16 @@ class GitHubAPIClient:
 
         due_date = ''
         # if not self.clone_via_tag:
+        time_is_current = False
         if not preset.clone_time:
-            preset.clone_time = get_time()
+            time_is_current, preset.clone_time = get_time()
 
-        due_date = get_date()
+        date_is_current, due_date = get_date()
         while not check_date(due_date):
             due_date = get_date()
+
+        if date_is_current and time_is_current:
+            self.current_pull = True
 
         if preset.append_timestamp:
             date_str = due_date[4:].replace('-', '_')
@@ -521,6 +619,9 @@ class GitHubAPIClient:
             os.mkdir(parent_folder_path)
         pull_stop_1 = perf_counter()
 
+        if self.context.config_manager.config.debug:
+            self.log_file_handler = open(str(Path(parent_folder_path) / 'log.txt'), 'w')
+            self.log_file_handler.write(f'*** Globals ***\n{pformat_objects(globals())}\n\n\n*** Locals ***\n{pformat_objects(locals())}*** Clone Details ***\n'.replace(self.context.config_manager.config.token, 'REDACTED'))
         skip_flag = False
         while True:
             pull_start_2 = perf_counter()
@@ -574,10 +675,21 @@ class GitHubAPIClient:
             tuple(self.assignment_output_log[assignment_name]),
         )
 
+
+        self.current_pull = False
         await self.save_report(report)
+
+        if self.log_file_handler is not None and self.context.config_manager.config.debug:
+            self.log_file_handler.writelines(self.clone_log)
+            self.log_file_handler.writelines(self.reset_log)
+
         del self.assignment_repos[assignment_name]
         del self.assignment_students_accepted[assignment_name]
         del self.assignment_students_not_accepted[assignment_name]
         del self.assignment_students_no_commit[assignment_name]
         del self.assignment_output_log[assignment_name]
         del self.assignment_flags[assignment_name]
+        self.clone_log = []
+        self.reset_log = []
+        await self.session.aclose()
+        self.session = None

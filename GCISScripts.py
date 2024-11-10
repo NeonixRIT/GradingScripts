@@ -22,7 +22,7 @@ from view import (
     GitHubAPIClient,
 )
 
-VERSION = '2.3.0'
+VERSION = '2.3.1'
 
 
 def verify_token_org(config) -> set:
@@ -99,7 +99,7 @@ def main():
 
     # Define Dependencies
     git = Dependency('git', '2.30', '')
-    requests = Dependency('requests', '2.31.0', 'pip')
+    httpx = Dependency('httpx', '0.27.0', 'pip')
     orjson = Dependency('orjson', '3.10.0', 'pip')
 
     # Define Config Entries
@@ -154,7 +154,7 @@ def main():
     default_paths = ['./data', './data/csvs', './data/files_to_add', str(app_folder)]
 
     # Create TUI
-    tui = TUI(VERSION, [git, requests, orjson], 'data/config.json', config_entries, default_paths)
+    tui = TUI(VERSION, [git, httpx, orjson], 'data/config.json', config_entries, default_paths)
 
     # Register Custom Verify Methods
     tui.context.config_manager += verify_token_org

@@ -118,6 +118,7 @@ async def run(cmd: str, cwd=None) -> tuple[str | None, str | None]:
     return (
         stdout.decode().strip() if stdout else None,
         stderr.decode().strip() if stderr else None,
+        proc.returncode
     )
 
 

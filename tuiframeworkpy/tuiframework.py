@@ -10,6 +10,7 @@ from .model.menu import Menu
 from .model.submenu import SubMenu
 from .model.utils import print_updates, clear
 
+from traceback import format_exc
 # TODO: Add logging module
 
 
@@ -94,6 +95,13 @@ class TUI:
         except (ConnectionError, KeyboardInterrupt, Exception) as e:
             clear()
             self.on_error()
+            try:
+                client_log_handler = getattr(self.menus[10].client, 'log_file_handler', None)
+                if client_log_handler is not None:
+                    client_log_handler.write(f'*** ERROR OCCURED ***\n{format_exc()}')
+                    client_log_handler.close()
+            except Exception:
+                pass
             if not isinstance(e, KeyboardInterrupt):
                 print(f'\n{LIGHT_RED}FATAL: Unknown Error Occured.{WHITE}\n\n{CYAN}{e}{WHITE}\n')
                 if getattr(self.context.config_manager.config, 'debug', True):

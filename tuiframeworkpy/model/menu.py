@@ -96,8 +96,6 @@ class Menu:
 
     def quit(self) -> None:
         print(self.quit_string)
-        input('Press enter to continue...')
-        clear()
         self.on_exit()
 
     def handle_option(self, user_option: str) -> tuple:
@@ -133,5 +131,4 @@ class Menu:
         while handle_option_return[0]:
             user_input = self.get_option()
             handle_option_return = self.handle_option(user_input)
-        clear()
         sys.exit(0)
