@@ -250,7 +250,7 @@ class GitHubAPIClient:
     async def __get_push_info(self, repo, due_date, due_time) -> tuple[str, int]:
         import orjson
         params = dict(self.push_params)
-        params['actor'] = repo['student_github']
+        # params['actor'] = repo['student_github']
 
         due_date, due_time = self.__get_adjusted_due_datetime(repo, due_date, due_time) # adjust based on student parameters
         due_datetime = datetime.strptime(f'{due_date} {due_time}', '%Y-%m-%d %H:%M') - timedelta(hours=UTC_OFFSET) # convert to UTC
