@@ -247,6 +247,17 @@ class GitHubAPIClient:
                 return push['after']
         return None
 
+    async def __get_pushed_count_fast(self, repo) -> int:
+        import orjson
+        params = dict(self.push_params)
+        url = f'{repo["url"]}/activity'
+        response = await self.__async_request(url, params)
+        if response.status_code != 200:
+            return -1
+        pushes = orjson.loads(response.content)
+        return len(pushes)
+
+
     async def __get_push_info(self, repo, due_date, due_time) -> tuple[str, int]:
         import orjson
         params = dict(self.push_params)
@@ -315,6 +326,8 @@ class GitHubAPIClient:
             commit_hash, push_count = "-1", 1
             if not self.current_pull:
                 commit_hash, push_count = await self.__get_push_info(repo, due_date, due_time)
+            else:
+                push_count = await self.__get_pushed_count_fast(repo)
             repo['due_commit_hash'] = commit_hash
             if push_count <= 0:
                 self.assignment_students_no_commit[assignment_name].add((student_name, student_github))
