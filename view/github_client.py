@@ -199,7 +199,7 @@ class GitHubAPIClient:
     async def __async_request(self, url: str, params: dict = None):
         import httpx
         if self.session is None:
-            self.session = httpx.AsyncClient()
+            self.session = httpx.AsyncClient(http1=False, http2=True)
 
         response = await self.session.get(f'{url}?{urlencode(params)}', headers=self.headers)
         if self.log_file_handler is not None:

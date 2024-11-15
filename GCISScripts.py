@@ -98,9 +98,13 @@ def main():
         kernel32.SetConsoleMode(kernel32.GetStdHandle(-11), 7)
 
     # Define Dependencies
-    git = Dependency('git', '2.30', '')
-    httpx = Dependency('httpx', '0.27.0', 'pip')
-    orjson = Dependency('orjson', '3.10.0', 'pip')
+    git = Dependency('git', '2.30', '') # clone repoes with cli
+    httpx = Dependency('httpx', '0.27.2', 'pip') # async http client
+    h2 = Dependency('h2', '4.1.0', 'pip') # http2 for httpx
+    hpack = Dependency('hpack', '4.0.0', 'pip') # http2 for httpx
+    hyperframe = Dependency('hyperframe', '6.0.1', 'pip') # http2 for httpx
+    orjson = Dependency('orjson', '3.10.0', 'pip') # fast json parser
+    uvloop = Dependency('uvloop', '0.21.0', 'pip') # fast async event loop
 
     # Define Config Entries
     token_entry = ConfigEntry(
@@ -154,7 +158,7 @@ def main():
     default_paths = ['./data', './data/csvs', './data/files_to_add', str(app_folder)]
 
     # Create TUI
-    tui = TUI(VERSION, [git, httpx, orjson], 'data/config.json', config_entries, default_paths)
+    tui = TUI(VERSION, [git, httpx, orjson, uvloop, h2, hpack, hyperframe], 'data/config.json', config_entries, default_paths)
 
     # Register Custom Verify Methods
     tui.context.config_manager += verify_token_org

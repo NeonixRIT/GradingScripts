@@ -28,8 +28,9 @@ class TUI:
         for directory in default_paths:
             Path(directory).mkdir(parents=True, exist_ok=True)
 
-        versionamanagerpy = Dependency('versionmanagerpy', '1.0.2', 'pip')
-        depends_man = DependencyManager([versionamanagerpy] + dependencies)
+        requests = Dependency('requests', '2.32.0', 'pip') # for versionmanagerpy
+        versionamanagerpy = Dependency('versionmanagerpy', '1.0.2', 'pip') # for update checking
+        depends_man = DependencyManager([requests, versionamanagerpy] + dependencies)
 
         debug_entry = ConfigEntry(
             'debug',
