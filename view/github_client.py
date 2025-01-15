@@ -800,6 +800,7 @@ class GitHubAPIClient:
         self.clone_log = []
         self.reset_log = []
         await self.session.aclose()
-        self.log_file_handler.close()
+        if self.log_file_handler is not None:
+            self.log_file_handler.close()
         self.log_file_handler = None
         self.session = None
