@@ -7,6 +7,11 @@ from .dependency import DependencyInstallationError, IndependentDependencyError
 class DependencyManager:
     def __init__(self, dependencies: list[Dependency], verbose: bool = False):
         self.dependencies = dependencies
+        # group dependencies by package manager
+        # for dependency in dependencies:
+        #     if dependency.package_manager_cmd not in self.dependencies:
+        #         self.dependencies[dependency.package_manager_cmd] = []
+        #     self.dependencies[dependency.package_manager_cmd].append(dependency)
         self.verbose = verbose
         self.update_verbose(verbose=verbose)
 

@@ -21,6 +21,8 @@ class IndependentDependencyError(Exception):
         self.message = f'{LIGHT_RED}FATAL: Dependency is missing or out of date and cannot be installed automatically: {dependency.package}>={dependency.req_version}{WHITE}'
 
 
+CACHED_RESULTS = {}
+
 class Dependency:
     def __init__(
         self,
@@ -61,23 +63,29 @@ class Dependency:
 
     def check(self) -> tuple[bool, bool]:
         args = []
-        is_uv = False
         if self.package_manager_cmd == 'pip':
             try:
-                subprocess.check_call(['uv', '--version'], stderr=subprocess.PIPE, stdout=subprocess.PIPE)
-                args = ['uv', 'pip', 'freeze', '--color=never']
-                is_uv = True
+                subprocess.check_call(('uv', '--version'), stderr=subprocess.PIPE, stdout=subprocess.PIPE)
+                args = ('uv', 'pip', 'freeze', '--color=never')
             except FileNotFoundError:
-                args = [sys.executable, '-m', 'pip', 'show', self.package]
+                args = (sys.executable, '-m', 'pip', 'freeze', '--no-color')
         else:
-            args = [self.package, self.version_flag]
+            args = (self.package, self.version_flag)
 
         try:
             current_version = None
-            if is_uv:
-                current_version = re.findall(f'{self.package}=={self.version_regex}', subprocess.check_output(args).decode().strip())
+            if args in CACHED_RESULTS:
+                if self.package_manager_cmd == 'pip':
+                    current_version = re.findall(f'{self.package}=={self.version_regex}', CACHED_RESULTS[args])
+                else:
+                    current_version = re.findall(f'{self.version_regex}', CACHED_RESULTS[args])
             else:
-                current_version = re.findall(self.version_regex, subprocess.check_output(args).decode().strip())
+                result = subprocess.check_output(args).decode().strip()
+                CACHED_RESULTS[args] = result
+                if self.package_manager_cmd == 'pip':
+                    current_version = re.findall(f'{self.package}=={self.version_regex}', CACHED_RESULTS[args])
+                else:
+                    current_version = re.findall(f'{self.version_regex}', CACHED_RESULTS[args])
             if self.verbose:
                 print(f'    args: {args}')
                 print(f'    Current version: {current_version}')
