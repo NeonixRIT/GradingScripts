@@ -4,7 +4,7 @@ import os
 
 from .clone_preset import ClonePreset
 
-from utils import get_color_from_bool, run, list_to_multi_clone_presets
+from utils import get_color_from_bool, run, list_to_multi_clone_presets, onerror
 from tuiframeworkpy import SubMenu, Event, MenuOption
 from tuiframeworkpy import LIGHT_RED, LIGHT_GREEN, WHITE
 
@@ -127,19 +127,11 @@ def attempt_get_tag():
     return assignment_name
 
 
-def onerror(func, path: str, exc_info) -> None:
-    import stat
-
-    if not os.access(path, os.W_OK):
-        os.chmod(path, stat.S_IWUSR)
-        func(path)
-    else:
-        raise
-
-
 class LocalRepo:
     """
     Object representing a cloned repo
+
+    Mostly legacy code
     """
 
     __slots__ = ['__path', '__old_name', '__new_name', '__remote_repo']
@@ -210,7 +202,7 @@ class LocalRepo:
         await self.attempt_git_workflow(commit_message)
 
     async def delete(self) -> None:
-        shutil.rmtree(self.__path, onerror=onerror)
+        shutil.rmtree(self.__path, onexc=onerror)
 
     async def get_stats(self) -> list:
         raise NotImplementedError('This method has not been implemented.')

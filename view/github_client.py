@@ -8,7 +8,7 @@ from .clone_preset import ClonePreset
 from .clone_report import CloneReport
 from .student_param import StudentParam
 
-from utils import bool_prompt, run
+from utils import bool_prompt, run, onerror
 from tuiframeworkpy import LIGHT_RED, LIGHT_GREEN, WHITE, CYAN
 
 from copy import deepcopy
@@ -348,7 +348,8 @@ class GitHubAPIClient:
         try:
             # run process on system that executes 'git reset' command. stdout is redirected so it doesn't output to end user
             # git reset is similar to checkout but doesn't care about detached heads and is more forceful
-            cmd = f'git reset --hard {repo["due_commit_hash"]}'
+            # cmd = f'git reset --hard {repo["due_commit_hash"]}'
+            cmd = ['git', 'reset', '--hard', repo['due_commit_hash']]
             stdout, stderr, exitcode = await run(cmd, repo['local_path'])
             if self.context.config_manager.config.debug:
                 self.reset_log.append(f'*** ROLLBACK REPO [{repo["name"]}] ***\n{stdout}\n{stderr}\n{exitcode=}\n')
@@ -405,9 +406,11 @@ class GitHubAPIClient:
         # outputs_log.append(clone_str)
         # run process on system that executes 'git clone' command. stdout is redirected so it doesn't output to end user
         clone_url = repo['clone_url'].replace('https://', f'https://{self.__auth_token}@')
-        cmd = f'git clone --single-branch {clone_url} "{destination_path}"'  # if not due_tag else f'git clone --branch {due_tag} --single-branch {clone_url} "{destination_path}"'
+        # cmd = f'git clone --single-branch {clone_url} "{destination_path}"'  # if not due_tag else f'git clone --branch {due_tag} --single-branch {clone_url} "{destination_path}"'
+        cmd = ['git', 'clone', '--single-branch', clone_url, destination_path]
         if self.current_pull:
-            cmd = f'git clone --single-branch --depth 1 {clone_url} "{destination_path}"'
+            # cmd = f'git clone --single-branch --depth 1 {clone_url} "{destination_path}"'
+            cmd = ['git', 'clone', '--single-branch', '--depth', '1', clone_url, destination_path]
         if not self.context.dry_run:
             # If a repo fails to clone, automatically retry once, if it fails again, alert and ask user if they want to retry
             # logging not addiquate here. All instances don't add to log or are overwritten by others in race condition?
@@ -626,7 +629,7 @@ class GitHubAPIClient:
                 print(f'{CYAN}[INFO]: Will delete {num_files} files/folders in {parent_folder_path}.{WHITE}')
                 for folder in os.listdir(parent_folder_path):
                     if (Path(parent_folder_path) / folder).is_dir():
-                        shutil.rmtree(Path(parent_folder_path) / folder)
+                        shutil.rmtree(Path(parent_folder_path) / folder, onexc=onerror)
                     else:
                         os.remove(Path(parent_folder_path) / folder)
 

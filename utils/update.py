@@ -55,12 +55,12 @@ def download_and_update(save_path):
         dst_path = os.path.join(script_location, f)
         if Path(dst_path).exists():
             if Path(dst_path).is_dir():
-                shutil.rmtree(dst_path, onerror=onerror)
+                shutil.rmtree(dst_path, onexc=onerror)
             else:
                 os.remove(dst_path)
         shutil.move(src_path, dst_path)
     os.remove(save_path)
-    shutil.rmtree(source, onerror=onerror)
+    shutil.rmtree(source, onexc=onerror)
 
 
 if update_with_git:

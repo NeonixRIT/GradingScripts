@@ -11,6 +11,15 @@ from pathlib import Path
 from types import SimpleNamespace
 
 
+def onerror(func, path: str, exc_info) -> None:
+    import stat
+
+    if not os.access(path, os.W_OK):
+        os.chmod(path, stat.S_IWUSR)
+        func(path)
+    else:
+        raise
+
 def clear():
     print('\n' * 100)
     print('\033c\033[3J\033[2J\033[0m\033[H' * 200)
@@ -106,13 +115,18 @@ def get_color_from_bool(boolean):
     return LIGHT_GREEN if boolean else LIGHT_RED
 
 
-async def run(cmd: str, cwd=None) -> tuple[str | None, str | None]:
+async def run(cmd: str | list, cwd=None) -> tuple[str | None, str | None]:
     """
     Asyncronously start a subprocess and run a command returning its output
     """
     if cwd is None:
         cwd = os.getcwd()
-    proc = await asyncio.create_subprocess_shell(cmd, cwd=cwd, stderr=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE)
+
+    proc = None
+    # if isinstance(cmd, str):
+    #     proc = await asyncio.create_subprocess_shell(cmd, cwd=cwd, stderr=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE)
+    # elif isinstance(cmd, list):
+    proc = await asyncio.create_subprocess_exec(*cmd, cwd=cwd, stderr=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE)
 
     stdout, stderr = await proc.communicate()
     return (stdout.decode().strip() if stdout else None, stderr.decode().strip() if stderr else None, proc.returncode)
