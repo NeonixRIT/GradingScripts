@@ -152,6 +152,9 @@ class ConfigManager:
         return invalid_fields
 
     def verify_config(self):
+        if not self.depends_loaded:
+            return
+
         missing_fields = set()
         for entry in self.config_entries:
             if getattr(self.config, entry.name, None) is None:

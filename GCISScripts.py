@@ -22,7 +22,7 @@ from view import (
     GitHubAPIClient,
 )
 
-VERSION = '2.4.0'
+VERSION = '2.4.1'
 
 
 def verify_token_org(config) -> set:
@@ -104,7 +104,9 @@ def main():
     hpack = Dependency('hpack', '4.0.0', 'pip')  # http2 for httpx
     hyperframe = Dependency('hyperframe', '6.0.1', 'pip')  # http2 for httpx
     orjson = Dependency('orjson', '3.10.0', 'pip')  # fast json parser
-    # uvloop = Dependency('uvloop', '0.21.0', 'pip')  # fast async event loop
+
+    # Platform dependent dependency
+    fast_evenloop = Dependency('uvloop', '0.21.0', 'pip') if os.name != 'nt' else Dependency('winloop', '0.1.8', 'pip')
 
     # Define Config Entries
     token_entry = ConfigEntry(
@@ -142,7 +144,7 @@ def main():
     )
     presets = ConfigEntry('presets', 'Presets', [], None, prompt=False)
     clone_history = ConfigEntry('clone_history', 'Clone History', [], None, prompt=False)
-    student_params = ConfigEntry('extra_student_parameters', 'Extra Student Parameters', [], None, prompt=True)
+    student_params = ConfigEntry('extra_student_parameters', 'Extra Student Parameters', [], None, prompt=False)
     config_entries = [
         token_entry,
         org_entry,
@@ -158,7 +160,7 @@ def main():
     default_paths = ['./data', './data/csvs', './data/files_to_add', str(app_folder)]
 
     # Create TUI
-    tui = TUI(VERSION, [git, httpx, orjson, h2, hpack, hyperframe], 'data/config.json', config_entries, default_paths)
+    tui = TUI(VERSION, [git, fast_evenloop, httpx, orjson, h2, hpack, hyperframe], 'data/config.json', config_entries, default_paths)
 
     # Register Custom Verify Methods
     tui.context.config_manager += verify_token_org
