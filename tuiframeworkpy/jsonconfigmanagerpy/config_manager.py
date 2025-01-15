@@ -27,7 +27,7 @@ class ConfigManager:
         'on_config_save',
         'on_config_read',
         'on_config_verify',
-        'depends_loaded'
+        'depends_loaded',
     ]
 
     def __init__(self, config_path: str, config_entries: list[ConfigEntry] = None):
@@ -86,12 +86,12 @@ class ConfigManager:
 
     def __verify_on_depends_loaded(self):
         from time import sleep
+
         while True:
             if self.depends_loaded:
                 self.verify_config()
                 break
             sleep(0.5)
-
 
     def read_config(self) -> SimpleNamespace:
         config = json.loads(

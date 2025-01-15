@@ -16,8 +16,6 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from pprint import pformat
 from time import perf_counter
-from traceback import TracebackException
-from types import SimpleNamespace, ModuleType
 from urllib.parse import urlencode
 
 UTC_OFFSET = datetime.now(timezone.utc).astimezone().utcoffset() // timedelta(hours=1)
@@ -178,6 +176,7 @@ class GitHubAPIClient:
         Check if assignment exists
         """
         import orjson
+
         if not assignment_name:
             return True, -1
         params = dict(self.repo_params)
@@ -186,11 +185,11 @@ class GitHubAPIClient:
         url = 'https://api.github.com/search/repositories'
         response = await self.__async_request(url, params)
         if response.status_code != 200:
-            return False, 0
+            return 0
         repo_json = orjson.loads(response.content)
         if repo_json.get('total_count', 0) == 0:
-            return False, 0
-        return True, repo_json['total_count']
+            return 0
+        return repo_json['total_count']
 
     def print_and_log(self, message: str, assignment_name: str, color: str = WHITE):
         print(f'{color}{message}{WHITE}')
@@ -198,6 +197,7 @@ class GitHubAPIClient:
 
     async def __async_request(self, url: str, params: dict = None):
         import httpx
+
         if self.session is None:
             self.session = httpx.AsyncClient(http1=False, http2=True)
 
@@ -249,6 +249,7 @@ class GitHubAPIClient:
 
     async def __get_pushed_count_fast(self, repo) -> int:
         import orjson
+
         params = dict(self.push_params)
         url = f'{repo["url"]}/activity'
         response = await self.__async_request(url, params)
@@ -257,15 +258,16 @@ class GitHubAPIClient:
         pushes = orjson.loads(response.content)
         return len(pushes)
 
-
     async def __get_push_info(self, repo, due_date, due_time) -> tuple[str, int]:
+        # TODO: Support github classroom team repos, owned by the org, check "teams_url", and then "members_url" in repo json to get students in team
         import orjson
+
         params = dict(self.push_params)
         # params['actor'] = repo['student_github']
 
-        due_date, due_time = self.__get_adjusted_due_datetime(repo, due_date, due_time) # adjust based on student parameters
-        due_datetime = datetime.strptime(f'{due_date} {due_time}', '%Y-%m-%d %H:%M') - timedelta(hours=UTC_OFFSET) # convert to UTC
-        time_diff = due_datetime.hour - due_datetime.astimezone(CURRENT_TIMEZONE).hour # check if current time's Daylight Savings Time is different from due date/time
+        due_date, due_time = self.__get_adjusted_due_datetime(repo, due_date, due_time)  # adjust based on student parameters
+        due_datetime = datetime.strptime(f'{due_date} {due_time}', '%Y-%m-%d %H:%M') - timedelta(hours=UTC_OFFSET)  # convert to UTC
+        time_diff = due_datetime.hour - due_datetime.astimezone(CURRENT_TIMEZONE).hour  # check if current time's Daylight Savings Time is different from due date/time
         is_dst_diff = time_diff != 0
         if is_dst_diff:
             due_datetime -= timedelta(hours=time_diff)
@@ -274,7 +276,7 @@ class GitHubAPIClient:
         # GitHub API {owner}/{repo}/activity endpoint allows to query all pushes for a repo by a user
         url = f'{repo["url"]}/activity'
         # get first 100 pushes to a repository by a user
-        response = await self.__async_request(url , params)
+        response = await self.__async_request(url, params)
         if response.status_code != 200:
             return None, None
         # get list of pushes from json response
@@ -289,6 +291,7 @@ class GitHubAPIClient:
         # If there are more than 100 pushes and a push time before the due date/time was not found
         # proceed to get and process the rest of the pushes in batches of 100
         page_limit = get_page_by_rel(response.headers['link'], 'last') if 'link' in response.headers else 1
+        page_limit = 1 if page_limit is None else page_limit
         # if there is only one page of pushes, return None, meaning no push was found before due date/time
         # meaning the student either did not create the repo (accept the assignment) or did not push any commits
         # the loop is likely never run as pushing more that 100 times is rare.
@@ -304,6 +307,7 @@ class GitHubAPIClient:
 
     async def __poll_repos_page(self, params: dict, page: int):
         import orjson
+
         params['page'] = page
         url = f'https://api.github.com/search/repositories?{urlencode(params)}'
         response = await self.__async_request(url, params)
@@ -323,7 +327,7 @@ class GitHubAPIClient:
             repo['new_name'] = repo['name'].replace(student_github, student_name)
             repo['assignment_name'] = assignment_name
             self.assignment_students_accepted[assignment_name].add((student_name, student_github))
-            commit_hash, push_count = "-1", 1
+            commit_hash, push_count = '-1', 1
             if not self.current_pull:
                 commit_hash, push_count = await self.__get_push_info(repo, due_date, due_time)
             else:
@@ -345,7 +349,7 @@ class GitHubAPIClient:
             # run process on system that executes 'git reset' command. stdout is redirected so it doesn't output to end user
             # git reset is similar to checkout but doesn't care about detached heads and is more forceful
             cmd = f'git reset --hard {repo["due_commit_hash"]}'
-            stdout, stderr, exitcode = (await run(cmd, repo['local_path']))
+            stdout, stderr, exitcode = await run(cmd, repo['local_path'])
             if self.context.config_manager.config.debug:
                 self.reset_log.append(f'*** ROLLBACK REPO [{repo["name"]}] ***\n{stdout}\n{stderr}\n{exitcode=}\n')
             repo['is_rolled_back'] = True
@@ -361,6 +365,7 @@ class GitHubAPIClient:
         and are from students in class roster and are only for the desired assignment
         """
         import orjson
+
         params = dict(self.repo_params)
         if assignment_name in self.assignment_repos and not refresh:
             return self.assignment_repos[assignment_name]
@@ -406,11 +411,11 @@ class GitHubAPIClient:
         if not self.context.dry_run:
             # If a repo fails to clone, automatically retry once, if it fails again, alert and ask user if they want to retry
             # logging not addiquate here. All instances don't add to log or are overwritten by others in race condition?
-            stdout, stderr, exitcode = (await run(cmd))
+            stdout, stderr, exitcode = await run(cmd)
             if self.context.config_manager.config.debug:
                 self.clone_log.append(f'*** CLONE REPO [{repo["name"]}] ***\n{stdout}\n{stderr}\n{exitcode=}\n')
             if exitcode != 0:
-                stdout, stderr, exitcode = (await run(cmd))
+                stdout, stderr, exitcode = await run(cmd)
                 if self.context.config_manager.config.debug:
                     self.clone_log.append(f'*** CLONE REPO [{repo["name"]}] ***\n{stdout}\n{stderr}\n{exitcode=}\n')
                 if exitcode != 0:
@@ -497,15 +502,14 @@ class GitHubAPIClient:
         Get assignment name from input. Does not accept empty input.
         """
         assignment_name = input('Assignment Name: ')  # get assignment name (repo prefix)
-        assignment_exists, _ = await self.assignment_exists(assignment_name)
-        while not assignment_name or not assignment_exists:  # if input is empty ask again
+        repo_count = await self.assignment_exists(assignment_name)
+        while not assignment_name or not repo_count:  # if input is empty ask again
             if assignment_name == 'quit()':
                 return assignment_name
-            print(assignment_name, assignment_exists)
-            if not assignment_exists:
+            if not repo_count:
                 print(f'Assignment `{assignment_name}` not found. Please try again.')
             assignment_name = input('Please input an assignment name: ')
-            assignment_exists = await self.assignment_exists(assignment_name)
+            repo_count = await self.assignment_exists(assignment_name)
         return assignment_name
 
     async def save_report(self, report):
@@ -535,9 +539,7 @@ class GitHubAPIClient:
         repo_to_check = repos[len(repos) - 1]
         folders = os.listdir(Path(initial_path) / repo_to_check)
         if data_folder_name in folders:
-            shutil.copytree(
-                f'{str(Path(initial_path) / repo_to_check / data_folder_name)}',
-                f'{str(Path(initial_path) / data_folder_name)}')
+            shutil.copytree(f'{str(Path(initial_path) / repo_to_check / data_folder_name)}', f'{str(Path(initial_path) / data_folder_name)}')
             self.print_and_log(
                 f'{LIGHT_GREEN}Data folder extracted to the output directory.{WHITE}',
                 assignment_name,
@@ -687,7 +689,6 @@ class GitHubAPIClient:
             str(students_path),
             tuple(self.assignment_output_log[assignment_name]),
         )
-
 
         self.current_pull = False
         await self.save_report(report)

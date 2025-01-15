@@ -1,4 +1,7 @@
+import gc
+
 from pathlib import Path
+from traceback import format_exc
 
 from .dependencymanagerpy import DependencyManager, Dependency
 from .jsonconfigmanagerpy import ConfigManager, ConfigEntry
@@ -9,9 +12,6 @@ from .model.event import Event
 from .model.menu import Menu
 from .model.submenu import SubMenu
 from .model.utils import print_updates, clear
-
-from traceback import format_exc
-# TODO: Add logging module
 
 
 class TUI:
@@ -28,8 +28,8 @@ class TUI:
         for directory in default_paths:
             Path(directory).mkdir(parents=True, exist_ok=True)
 
-        requests = Dependency('requests', '2.32.0', 'pip') # for versionmanagerpy
-        versionamanagerpy = Dependency('versionmanagerpy', '1.0.2', 'pip') # for update checking
+        requests = Dependency('requests', '2.32.0', 'pip')  # for versionmanagerpy
+        versionamanagerpy = Dependency('versionmanagerpy', '1.0.2', 'pip')  # for update checking
         depends_man = DependencyManager([requests, versionamanagerpy] + dependencies)
 
         debug_entry = ConfigEntry(
@@ -54,6 +54,8 @@ class TUI:
 
     def add_menu(self, menu: Menu) -> None:
         menu.context = self.context
+        menu.on_exit += gc.collect
+        menu.on_enter += gc.collect
         self.menus[menu.id] = menu
 
     def add_submenu(self, submenu: SubMenu, parent: Menu):
@@ -65,6 +67,8 @@ class TUI:
         self.menus[menu_id].open()
 
     def start(self) -> None:
+        gc.disable()
+        gc.collect()
         try:
             self.on_start()
 

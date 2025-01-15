@@ -115,11 +115,7 @@ async def run(cmd: str, cwd=None) -> tuple[str | None, str | None]:
     proc = await asyncio.create_subprocess_shell(cmd, cwd=cwd, stderr=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE)
 
     stdout, stderr = await proc.communicate()
-    return (
-        stdout.decode().strip() if stdout else None,
-        stderr.decode().strip() if stderr else None,
-        proc.returncode
-    )
+    return (stdout.decode().strip() if stdout else None, stderr.decode().strip() if stderr else None, proc.returncode)
 
 
 def list_to_clone_preset(args: list) -> ClonePreset | None:
