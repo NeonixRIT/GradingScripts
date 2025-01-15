@@ -20,6 +20,7 @@ def onerror(func, path: str, exc_info) -> None:
     else:
         raise
 
+
 def clear():
     print('\n' * 100)
     print('\033c\033[3J\033[2J\033[0m\033[H' * 200)

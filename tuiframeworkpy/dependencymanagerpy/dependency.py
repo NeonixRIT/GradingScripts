@@ -25,6 +25,7 @@ CACHED_RESULTS = {}
 UV_CHECKED = False
 UV_INSTALLED = False
 
+
 class Dependency:
     def __init__(
         self,
@@ -55,11 +56,7 @@ class Dependency:
             # If we haven't yet checked for `uv`, do it once
             if not UV_CHECKED:
                 try:
-                    subprocess.check_call(
-                        ['uv', '--help'],
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE
-                    )
+                    subprocess.check_call(['uv', '--help'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                     UV_INSTALLED = True
                 except FileNotFoundError:
                     UV_INSTALLED = False
@@ -90,11 +87,7 @@ class Dependency:
             # If we've never checked for 'uv' before, do so
             if not UV_CHECKED:
                 try:
-                    subprocess.check_call(
-                        ('uv', '--version'), 
-                        stderr=subprocess.PIPE, 
-                        stdout=subprocess.PIPE
-                    )
+                    subprocess.check_call(('uv', '--version'), stderr=subprocess.PIPE, stdout=subprocess.PIPE)
                     UV_INSTALLED = True
                 except FileNotFoundError:
                     UV_INSTALLED = False

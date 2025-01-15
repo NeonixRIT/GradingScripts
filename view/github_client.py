@@ -137,6 +137,7 @@ class GitHubAPIClient:
         self.assignment_students_accepted = {}
         self.assignment_students_not_accepted = {}
         self.assignment_students_no_commit = {}
+        self.assignment_students_seen = {}
         self.assignment_output_log = {}
         self.assignment_flags = {}
 
@@ -208,6 +209,35 @@ class GitHubAPIClient:
             self.log_file_handler.write(f'{pformat_objects(response)}\n\n\n'.replace(self.context.config_manager.config.token, 'REDACTED'))
         return response
 
+    async def fetch_all_pages(self, base_url: str, params: dict):
+        import orjson
+
+        page = 1
+        while True:
+            params['page'] = page
+            response = await self.__async_request(base_url, params)
+            if response.status_code != 200:
+                break
+
+            data = orjson.loads(response.content)
+            items = None
+            if isinstance(data, dict):
+                items = data.get('items', [])
+            elif isinstance(data, list):
+                items = data
+            if not items:
+                break
+
+            # Yield the entire page's worth of items
+            yield items
+
+            # Check if there's another page available
+            links = response.headers.get('link', '')
+            last_page = get_page_by_rel(links, 'last')
+            if not last_page or page >= last_page:
+                break
+            page += 1
+
     def __get_adjusted_due_datetime(self, repo, due_date: str, due_time: str) -> tuple:
         pull_flags = self.assignment_flags[repo['assignment_name']]
         is_ca = pull_flags[0]
@@ -238,9 +268,17 @@ class GitHubAPIClient:
         else:
             date_due_tmp = due_date
             time_due_tmp = due_time
-        return date_due_tmp, time_due_tmp
 
-    def __get_commit_from_push(self, due_datetime: datetime, pushes: dict) -> str:
+        due_datetime = datetime.strptime(f'{date_due_tmp} {time_due_tmp}', '%Y-%m-%d %H:%M') - timedelta(hours=UTC_OFFSET)  # convert to UTC
+        time_diff = due_datetime.hour - due_datetime.astimezone(CURRENT_TIMEZONE).hour  # check if current time's Daylight Savings Time is different from due date/time
+        is_dst_diff = time_diff != 0
+        if is_dst_diff:
+            due_datetime -= timedelta(hours=time_diff)
+        # want to get pushes that happened before due date/time, so add a minute to due date/time
+        due_datetime = due_datetime + timedelta(minutes=1)
+        return due_datetime
+
+    def __get_commit_from_pushes(self, due_datetime: datetime, pushes: dict) -> str:
         for push in pushes:
             push_time = datetime.strptime(push['timestamp'], '%Y-%m-%dT%H:%M:%SZ')
             if push_time < due_datetime:
@@ -260,86 +298,90 @@ class GitHubAPIClient:
 
     async def __get_push_info(self, repo, due_date, due_time) -> tuple[str, int]:
         # TODO: Support github classroom team repos, owned by the org, check "teams_url", and then "members_url" in repo json to get students in team
-        import orjson
-
         params = dict(self.push_params)
         # params['actor'] = repo['student_github']
 
-        due_date, due_time = self.__get_adjusted_due_datetime(repo, due_date, due_time)  # adjust based on student parameters
-        due_datetime = datetime.strptime(f'{due_date} {due_time}', '%Y-%m-%d %H:%M') - timedelta(hours=UTC_OFFSET)  # convert to UTC
-        time_diff = due_datetime.hour - due_datetime.astimezone(CURRENT_TIMEZONE).hour  # check if current time's Daylight Savings Time is different from due date/time
-        is_dst_diff = time_diff != 0
-        if is_dst_diff:
-            due_datetime -= timedelta(hours=time_diff)
-        # want to get pushes that happened before due date/time, so add a minute to due date/time
-        due_datetime = due_datetime + timedelta(minutes=1)
+        due_datetime = self.__get_adjusted_due_datetime(repo, due_date, due_time)  # adjust based on student parameters, Timezone, and DST
         # GitHub API {owner}/{repo}/activity endpoint allows to query all pushes for a repo by a user
         url = f'{repo["url"]}/activity'
-        # get first 100 pushes to a repository by a user
-        response = await self.__async_request(url, params)
-        if response.status_code != 200:
-            return None, None
-        # get list of pushes from json response
-        # use orjson for faster json parsing
-        pushes = orjson.loads(response.content)
-        num_pushes = len(pushes)
-        # get commit hash from push that happened before due date/time
-        commit_hash = self.__get_commit_from_push(due_datetime, pushes)
-        if commit_hash is not None:
-            return commit_hash, num_pushes
-
-        # If there are more than 100 pushes and a push time before the due date/time was not found
-        # proceed to get and process the rest of the pushes in batches of 100
-        page_limit = get_page_by_rel(response.headers['link'], 'last') if 'link' in response.headers else 1
-        page_limit = 1 if page_limit is None else page_limit
-        # if there is only one page of pushes, return None, meaning no push was found before due date/time
-        # meaning the student either did not create the repo (accept the assignment) or did not push any commits
-        # the loop is likely never run as pushing more that 100 times is rare.
-        for page in range(2, page_limit + 1):
-            params['page'] = page
-            response = await self.__async_request(url, params)
-            pushes = orjson.loads(response.content)
-            commit_hash = self.__get_commit_from_push(due_datetime, pushes)
-            if commit_hash is not None:
-                return commit_hash, num_pushes + len(pushes)
+        num_pushes = 0
+        async for pushes in self.fetch_all_pages(url, params):
             num_pushes += len(pushes)
+            commit_hash = self.__get_commit_from_pushes(due_datetime, pushes)
+            if commit_hash is not None:
+                return commit_hash, num_pushes
         return None, num_pushes
 
-    async def __poll_repos_page(self, params: dict, page: int):
-        import orjson
+    async def _validate_repo_fields(self, repo: dict, due_date: str, due_time: str) -> dict | None:
+        """
+        Checks commit/push information for the given repo.
+        Returns the repo dict if it's valid, or None if it's invalid or has no commits.
+        """
+        student_name = repo['student_name']
+        student_github = repo['student_github']
 
-        params['page'] = page
-        url = f'https://api.github.com/search/repositories?{urlencode(params)}'
-        response = await self.__async_request(url, params)
-        if response.status_code != 200:
-            return False
+        # Decide which push info method to call
+        if not self.current_pull:
+            commit_hash, push_count = await self.__get_push_info(repo, due_date, due_time)
+        else:
+            # "Fast" approach: just check how many pushes exist
+            push_count = await self.__get_pushed_count_fast(repo)
+            commit_hash = '-1'  # Assign a default to indicate "current pull"
 
-        return orjson.loads(response.content)['items']
+        repo['due_commit_hash'] = commit_hash
 
-    async def __add_valid_repos(self, assignment_name: str, due_date: str, due_time: str, repos: list):
+        # If push_count <= 0, no commits exist in the repo
+        if push_count <= 0:
+            self.assignment_students_no_commit[repo['assignment_name']].add((student_name, student_github))
+            return None
+
+        # If there's no valid commit before due date/time, treat as not accepted
+        if commit_hash is None:
+            self.assignment_students_not_accepted[repo['assignment_name']].add((student_name, student_github))
+            return None
+
+        # Otherwise, repo is valid
+        return repo
+
+    async def __add_valid_repos(self, assignment_name: str, due_date: str, due_time: str, repos: list[dict]) -> None:
+        """
+        Filters and validates a list of repo dictionaries, ensuring they:
+        1. Belong to a student in self.students.
+        2. Have a valid commit hash before the due date/time (unless we're in current_pull mode).
+        3. Actually have commits (push_count > 0).
+
+        Valid repos are appended to self.assignment_repos[assignment_name].
+        """
+        tasks = []
         for repo in repos:
+            # 1. Filter out repos whose 'name' doesn't match a known student
             student_github = repo['name'].replace(f'{assignment_name}-', '')
             if student_github not in self.students:
                 continue
+
+            # 2. Populate needed fields
             student_name = self.students[student_github]
             repo['student_name'] = student_name
             repo['student_github'] = student_github
             repo['new_name'] = repo['name'].replace(student_github, student_name)
             repo['assignment_name'] = assignment_name
+
+            # Track this student as having accepted (until proven otherwise)
             self.assignment_students_accepted[assignment_name].add((student_name, student_github))
-            commit_hash, push_count = '-1', 1
-            if not self.current_pull:
-                commit_hash, push_count = await self.__get_push_info(repo, due_date, due_time)
-            else:
-                push_count = await self.__get_pushed_count_fast(repo)
-            repo['due_commit_hash'] = commit_hash
-            if push_count <= 0:
-                self.assignment_students_no_commit[assignment_name].add((student_name, student_github))
+
+            # 3. Schedule a task to validate commit/push info for each repo
+            tasks.append(asyncio.create_task(self._validate_repo_fields(repo, due_date, due_time)))
+
+        # 4. Run all validations concurrently
+        validated_repos = await asyncio.gather(*tasks)
+
+        # 5. Append valid repos to our assignment_repos list
+        for valid_repo in validated_repos:
+            # _validate_repo_fields returns None if invalid
+            if valid_repo is None:
                 continue
-            if commit_hash is None:
-                self.assignment_students_not_accepted[assignment_name].add((student_name, student_github))
-                continue
-            self.assignment_repos[assignment_name].append(repo)
+            self.assignment_students_seen[assignment_name].add((valid_repo['student_name'], valid_repo['student_github']))
+            self.assignment_repos[assignment_name].append(valid_repo)
 
     async def __rollback_repo(self, repo):
         """
@@ -365,8 +407,6 @@ class GitHubAPIClient:
         Return all repos that have at least one commit before due date/time
         and are from students in class roster and are only for the desired assignment
         """
-        import orjson
-
         params = dict(self.repo_params)
         if assignment_name in self.assignment_repos and not refresh:
             return self.assignment_repos[assignment_name]
@@ -378,20 +418,14 @@ class GitHubAPIClient:
         self.assignment_students_accepted[assignment_name] = set()
         self.assignment_students_not_accepted[assignment_name] = set()
         self.assignment_students_no_commit[assignment_name] = set()
+        self.assignment_students_seen[assignment_name] = set()
         self.assignment_output_log[assignment_name] = []
-        url = 'https://api.github.com/search/repositories'
-        response = await self.__async_request(url, params)
-        if response.status_code != 200:
-            return response.status_code  # raise error based on code
-        page_limit = 1
-        if 'link' in response.headers:
-            page_limit = get_page_by_rel(response.headers['link'], 'last')
 
-        repos = orjson.loads(response.content)['items']
-        await self.__add_valid_repos(assignment_name, due_date, due_time, repos)
-        for page in range(2, page_limit + 1):
-            repos = await self.__poll_repos_page(params, page)
+        url = 'https://api.github.com/search/repositories'
+        async for repos in self.fetch_all_pages(url, params):
             await self.__add_valid_repos(assignment_name, due_date, due_time, repos)
+            if len(self.assignment_students_seen[assignment_name]) == len(self.students):
+                break
 
         for student_github in self.students:
             student_tuple = (self.students[student_github], student_github)
@@ -399,41 +433,97 @@ class GitHubAPIClient:
                 self.assignment_students_not_accepted[assignment_name].add((self.students[student_github], student_github))
         return self.assignment_repos[assignment_name]
 
-    async def __clone_repo(self, repo, path: Path):
-        destination_path = f'{path}/{repo["new_name"]}'
-        clone_str = f'    > Cloning [{repo["name"]}] {repo["new_name"]}...'
-        self.print_and_log(clone_str, repo['assignment_name'])  # tell end user what repo is being cloned and where it is going to
-        # outputs_log.append(clone_str)
-        # run process on system that executes 'git clone' command. stdout is redirected so it doesn't output to end user
-        clone_url = repo['clone_url'].replace('https://', f'https://{self.__auth_token}@')
-        # cmd = f'git clone --single-branch {clone_url} "{destination_path}"'  # if not due_tag else f'git clone --branch {due_tag} --single-branch {clone_url} "{destination_path}"'
-        cmd = ['git', 'clone', '--single-branch', clone_url, destination_path]
-        if self.current_pull:
-            # cmd = f'git clone --single-branch --depth 1 {clone_url} "{destination_path}"'
-            cmd = ['git', 'clone', '--single-branch', '--depth', '1', clone_url, destination_path]
-        if not self.context.dry_run:
-            # If a repo fails to clone, automatically retry once, if it fails again, alert and ask user if they want to retry
-            # logging not addiquate here. All instances don't add to log or are overwritten by others in race condition?
-            stdout, stderr, exitcode = await run(cmd)
-            if self.context.config_manager.config.debug:
-                self.clone_log.append(f'*** CLONE REPO [{repo["name"]}] ***\n{stdout}\n{stderr}\n{exitcode=}\n')
-            if exitcode != 0:
-                stdout, stderr, exitcode = await run(cmd)
-                if self.context.config_manager.config.debug:
-                    self.clone_log.append(f'*** CLONE REPO [{repo["name"]}] ***\n{stdout}\n{stderr}\n{exitcode=}\n')
-                if exitcode != 0:
-                    self.print_and_log(
-                        f'{LIGHT_RED}[{repo["name"]}] Clone Failed again for the following reason:\n{stderr}\n{WHITE}',
-                        repo['assignment_name'],
-                    )
-                while exitcode != 0 and bool_prompt('Would you like to retry?', True):
-                    stdout, stderr, exitcode = await run(cmd)
-                    if self.context.config_manager.config.debug:
-                        self.clone_log.append(f'*** CLONE REPO [{repo["name"]}] ***\n{stdout}\n{stderr}\n{exitcode=}\n')
+    async def __clone_repo(self, repo: dict, path: Path) -> None:
+        """
+        Clones the given repo into `path / repo["new_name"]`.
+        If clone is successful and `self.current_pull` is False (and not dry_run),
+        attempts to roll back the repo to the due date/time commit hash.
+        """
+        destination_path = str(Path(path) / repo['new_name'])
+        self.print_and_log(
+            f'    > Cloning [{repo["name"]}] {repo["new_name"]}...',
+            repo['assignment_name'],
+        )
+
+        # 1. Build the git clone command
+        cmd = self._build_clone_cmd(repo, destination_path)
+
+        # 2. If dry_run, skip the actual clone
+        if self.context.dry_run:
+            repo['local_path'] = destination_path
+            return
+
+        # 3. Attempt the clone (with automatic retry on failure)
+        success = await self._attempt_clone(repo, cmd)
+
+        # 4. If clone fails or we’re in a current pull, do nothing else
+        if not success or self.current_pull:
+            repo['local_path'] = destination_path
+            return
+
+        # 5. Otherwise, roll back the repo
         repo['local_path'] = destination_path
-        # if a current pull, dont roll back. If dry run, don't roll back
-        if not self.current_pull and not self.context.dry_run:
-            await self.__rollback_repo(repo)
+        await self.__rollback_repo(repo)
+
+    def _build_clone_cmd(self, repo: dict, destination_path: str) -> list[str]:
+        """
+        Returns a list containing the git clone command.
+        Injects the auth token and decides whether to clone shallow (--depth=1) or not.
+        """
+        clone_url = repo['clone_url'].replace('https://', f'https://{self.__auth_token}@')
+        base_cmd = ['git', 'clone', '--single-branch']
+
+        if self.current_pull:
+            # Shallow clone if pulling 'current' state
+            base_cmd.extend(['--depth', '1'])
+
+        base_cmd.extend([clone_url, destination_path])
+        return base_cmd
+
+    async def _attempt_clone(self, repo: dict, cmd: list[str]) -> bool:
+        """
+        Attempts to clone the repo. If it fails, retries once automatically,
+        then repeatedly prompts the user if they'd like to retry again.
+        Logs output if debug is enabled.
+        Returns True if the clone eventually succeeds, False otherwise.
+        """
+        max_automatic_retries = 1
+
+        for i in range(max_automatic_retries + 1):
+            success = await self._run_clone_command(repo, cmd)
+            if success:
+                return True
+            # If this wasn't the last automatic retry, keep going
+            if i < max_automatic_retries:
+                continue
+
+            # Prompt the user for further retries if the clone continues failing
+            while True:
+                if not bool_prompt('Would you like to retry?', True):
+                    return False
+                if await self._run_clone_command(repo, cmd):
+                    return True
+
+        return False  # If we somehow exit the loop without success
+
+    async def _run_clone_command(self, repo: dict, cmd: list[str]) -> bool:
+        """
+        Executes the git clone command once. Returns True if successful, False otherwise.
+        Logs stdout/stderr if debug is enabled.
+        """
+        stdout, stderr, exitcode = await run(cmd)
+        if self.context.config_manager.config.debug:
+            self.clone_log.append(f'*** CLONE REPO [{repo["name"]}] ***\n{stdout}\n{stderr}\nexitcode={exitcode}\n')
+
+        if exitcode != 0:
+            # Print the error on the last forced attempt
+            self.print_and_log(
+                f'{LIGHT_RED}[{repo["name"]}] Clone Failed:\n{stderr}\n{WHITE}',
+                repo['assignment_name'],
+            )
+            return False
+
+        return True
 
     async def pull_assignment_repos(self, assignment_name: str, path: Path | str):
         """
@@ -706,6 +796,7 @@ class GitHubAPIClient:
         del self.assignment_students_no_commit[assignment_name]
         del self.assignment_output_log[assignment_name]
         del self.assignment_flags[assignment_name]
+        del self.assignment_students_seen[assignment_name]
         self.clone_log = []
         self.reset_log = []
         await self.session.aclose()
