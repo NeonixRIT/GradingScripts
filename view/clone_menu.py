@@ -88,10 +88,10 @@ class CloneMenu(SubMenu):
         self.context.config_manager.set_config_value('clone_history', clone_logs)
 
     def clone_repos(self, preset: ClonePreset = None):
-        import uvloop
+        # import uvloop
 
         self.context.dry_run = bool(self.dry_run)
-        asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+        # asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
         asyncio.run(self.client.run(preset))
         del self.context.dry_run
 

@@ -104,7 +104,7 @@ def main():
     hpack = Dependency('hpack', '4.0.0', 'pip')  # http2 for httpx
     hyperframe = Dependency('hyperframe', '6.0.1', 'pip')  # http2 for httpx
     orjson = Dependency('orjson', '3.10.0', 'pip')  # fast json parser
-    uvloop = Dependency('uvloop', '0.21.0', 'pip')  # fast async event loop
+    # uvloop = Dependency('uvloop', '0.21.0', 'pip')  # fast async event loop
 
     # Define Config Entries
     token_entry = ConfigEntry(
@@ -158,7 +158,7 @@ def main():
     default_paths = ['./data', './data/csvs', './data/files_to_add', str(app_folder)]
 
     # Create TUI
-    tui = TUI(VERSION, [git, httpx, orjson, uvloop, h2, hpack, hyperframe], 'data/config.json', config_entries, default_paths)
+    tui = TUI(VERSION, [git, httpx, orjson, h2, hpack, hyperframe], 'data/config.json', config_entries, default_paths)
 
     # Register Custom Verify Methods
     tui.context.config_manager += verify_token_org
