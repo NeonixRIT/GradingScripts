@@ -977,7 +977,3 @@ def main(preset = None, dry_run = None, config_manager = None):
         log_handler.close()
         client.close()
         gc.collect()
-
-
-if __name__ == '__main__':
-    main()
