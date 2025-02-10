@@ -10,6 +10,8 @@ from tuiframeworkpy import (
     WHITE,
 )
 
+from tuiframeworkpy.model.utils import BareGitHubAPIClient
+
 from view import (
     MainMenu,
     CloneMenu,
@@ -19,7 +21,6 @@ from view import (
     AddMenu,
     CloneHistoryMenu,
     StudentParamsMenu,
-    GitHubAPIClient,
 )
 
 VERSION = '2.6.0'
@@ -28,8 +29,8 @@ VERSION = '2.6.0'
 def verify_token_org(config) -> set:
     invalid_fields = set()
     try:
-        tmp_client = GitHubAPIClient(None, config.token, config.organization)
-        authorized, resp_code = tmp_client.is_authorized()
+        tmp_client = BareGitHubAPIClient()
+        authorized, resp_code = tmp_client.is_authorized(config.organization, config.token)
         if resp_code == 200 and authorized:
             return invalid_fields
         elif resp_code == 401:
@@ -99,14 +100,11 @@ def main():
 
     # Define Dependencies
     git = Dependency('git', '2.30', '')  # clone repoes with cli
-    httpx = Dependency('httpx', '0.27.2', 'pip')  # async http client
-    h2 = Dependency('h2', '4.1.0', 'pip')  # http2 for httpx
-    hpack = Dependency('hpack', '4.0.0', 'pip')  # http2 for httpx
-    hyperframe = Dependency('hyperframe', '6.0.1', 'pip')  # http2 for httpx
+    niquests = Dependency('niquests', '3.12.0', 'pip')  # http client
     orjson = Dependency('orjson', '3.10.0', 'pip')  # fast json parser
 
     # Platform dependent dependency
-    fast_evenloop = Dependency('uvloop', '0.21.0', 'pip') if os.name != 'nt' else Dependency('winloop', '0.1.8', 'pip')
+    # fast_evenloop = Dependency('uvloop', '0.21.0', 'pip') if os.name != 'nt' else Dependency('winloop', '0.1.8', 'pip')
 
     # Define Config Entries
     token_entry = ConfigEntry(
@@ -160,7 +158,7 @@ def main():
     default_paths = ['./data', './data/csvs', './data/files_to_add', str(app_folder)]
 
     # Create TUI
-    tui = TUI(VERSION, [git, fast_evenloop, httpx, orjson, h2, hpack, hyperframe], 'data/config.json', config_entries, default_paths)
+    tui = TUI(VERSION, [git, orjson, niquests], 'data/config.json', config_entries, default_paths)
 
     # Register Custom Verify Methods
     tui.context.config_manager += verify_token_org

@@ -855,7 +855,7 @@ def main(preset = None, dry_run = None, config_manager = None):
                 log_handler.info(f'Deleting files in {out_dir}')
             num_files_deleted = delete_files_in_dir(out_dir, dry_run)
             if dry_run:
-                print_and_log(f'{CYAN}[INFO]: Would have deleted {num_files_deleted} files/folders in {out_dir}.{WHITE}')
+                print_and_log(f'{CYAN}[INFO]: Would have deleted {num_files_deleted} files/folders in {out_dir}.{WHITE}', prints_log)
             else:
                 print_and_log(f'{CYAN}[INFO]: Deleted {num_files_deleted} files/folders in {out_dir}.{WHITE}', prints_log)
         elif not dry_run:
@@ -972,7 +972,7 @@ def main(preset = None, dry_run = None, config_manager = None):
         if debug:
             log_handler.critical(f'Error: {e}')
             log_handler.critical(format_exc())
-        print(f'{LIGHT_RED}Error: {e}{WHITE}')
+        raise e
     finally:
         log_handler.close()
         client.close()
