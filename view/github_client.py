@@ -938,7 +938,7 @@ def main(preset = None, dry_run = None, config_manager = None):
             log_handler.info('Repo status print thread done.')
         pull_stop = perf_counter()
         ellapsed_time = (pull_stop - pull_start) + (stop_1 - start_1) + (stop_2 - start_2) + (stop_3 - start_3)
-        if not skip_flag:
+        if not skip_flag and not dry_run:
             extract_data_folder(out_dir)
             create_vscode_workspace(out_dir, repo_prefix, repos)
         report_str = print_pull_report(students, num_repos, num_not_accepted, num_no_commit, num_cloned, num_reset, ellapsed_time, dry_run, current_pull)
