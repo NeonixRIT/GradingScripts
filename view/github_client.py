@@ -1,25 +1,55 @@
-import asyncio
 import csv
-import os
 import re
+import os
 import shutil
+import subprocess
+import gc
 
 from .clone_preset import ClonePreset
 from .clone_report import CloneReport
 from .student_param import StudentParam
+from tuiframeworkpy import LIGHT_GREEN, LIGHT_RED, CYAN, WHITE, YELLOW
 
-from utils import bool_prompt, run, onerror
-from tuiframeworkpy import LIGHT_RED, LIGHT_GREEN, WHITE, CYAN
-
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from copy import deepcopy
 from datetime import date, datetime, timedelta, timezone
-from pathlib import Path
+from enum import Enum
+from urllib.parse import urlencode
+
 from pprint import pformat
 from time import perf_counter
-from urllib.parse import urlencode
+from pathlib import Path
+from traceback import format_exc
+
 
 UTC_OFFSET = datetime.now(timezone.utc).astimezone().utcoffset() // timedelta(hours=1)
 CURRENT_TIMEZONE = timezone(timedelta(hours=UTC_OFFSET))
+VALID_TIME_REGEX = re.compile(r'^[0-2][0-9]:[0-5][0-9]$')
+VALID_DATE_REGEX = re.compile(r'^\d{4}-[0-1][0-2]-[0-3][0-9]$')
+
+
+def run_cmd(cmd: str | list, cwd=None) -> tuple[str | None, str | None]:
+    """
+    Syncronously start a subprocess and run a command returning its output
+    """
+    if cwd is None:
+        cwd = os.getcwd()
+
+    proc = None
+    if isinstance(cmd, str):
+        proc = subprocess.Popen(cmd, cwd=cwd, stderr=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
+    elif isinstance(cmd, list):
+        proc = subprocess.Popen(cmd, cwd=cwd, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
+
+    stdout, stderr = proc.communicate()
+    return (stdout.decode().strip() if stdout else None, stderr.decode().strip() if stderr else None, proc.returncode)
+
+
+def bool_prompt(prompt: str, default_output: bool) -> bool:
+    y_str = 'Y' if default_output else 'y'
+    n_str = 'N' if not default_output else 'n'
+    result = input(f'{prompt} ({LIGHT_GREEN}{y_str}{WHITE}/{LIGHT_RED}{n_str}{WHITE}): ')
+    return default_output if not result else True if result.lower() == 'y' else False if result.lower() == 'n' else default_output
 
 
 def get_page_by_rel(links: str, rel: str = 'last'):
@@ -27,28 +57,6 @@ def get_page_by_rel(links: str, rel: str = 'last'):
     if val:
         return int(val[0])
     return None
-
-
-def get_students(student_filename: str) -> dict:
-    """
-    Reads class roster csv in the format given by github classroom:
-    "identifier","github_username","github_id","name"
-
-    and returns a dictionary of students mapping github username to real name
-    """
-    students = {}  # student dict
-    if Path(student_filename).exists():  # if classroom roster is found
-        with open(student_filename) as f_handle:  # use with to auto close file
-            csv_reader = csv.reader(f_handle)  # Use csv reader to separate values into a list
-            next(csv_reader)  # skip header line
-            for student in csv_reader:
-                name = re.sub(r'([.]\s?|[,]\s?|\s)', '-', student[0]).replace("'", '-').rstrip(r'-').strip()
-                github = student[1].strip()
-                if name and github:  # if csv contains student name and github username, map them to each other
-                    students[github] = name
-    else:
-        raise Exception(f'Classroom roster `{student_filename}` does not exist.')
-    return students  # return dict mapping names to github usernames
 
 
 def pformat_objects(x):
@@ -78,48 +86,166 @@ def pformat_objects(x):
         return pformat(x)
 
 
-def get_time():
+def get_students(student_filename: str) -> dict:
     """
-    Get assignment due time from input.
+    Reads class roster csv in the format given by github classroom:
+    "identifier","github_username","github_id","name"
+
+    and returns a dictionary of students mapping github username to real name
     """
-    current = False
-    time_due = input('Time Due (24hr HH:MM, press `enter` for current): ')  # get time assignment was due
-    if not time_due:  # if time due is blank use current time
-        current = True
-        current_time = datetime.now()  # get current time
-        time_due = current_time.strftime('%H:%M')  # format current time into hour:minute 24hr format
-        print(f'Using current time: {time_due}')  # output what is being used to end user
-    return current, time_due
+    students = {}  # student dict
+    if Path(student_filename).exists():  # if classroom roster is found
+        with open(student_filename) as f_handle:  # use with to auto close file
+            csv_reader = csv.reader(f_handle)  # Use csv reader to separate values into a list
+            next(csv_reader)  # skip header line
+            for student in csv_reader:
+                name = re.sub(r'([.]\s?|[,]\s?|\s)', '-', student[0]).replace("'", '-').rstrip(r'-').strip()
+                github = student[1].strip()
+                if name and github:  # if csv contains student name and github username, map them to each other
+                    students[github] = name
+    else:
+        raise Exception(f'Classroom roster `{student_filename}` does not exist.')
+    return students  # return dict mapping names to github usernames
 
 
-def get_date():
-    """
-    Get assignment due date from input.
-    """
-    current = False
-    date_due = input('Date Due (format = yyyy-mm-dd, press `enter` for current): ')  # get due date
-    if not date_due:  # If due date is blank use current date
-        current = True
-        current_date = date.today()  # get current date
-        date_due = current_date.strftime('%Y-%m-%d')  # get current date in year-month-day format
-        print(f'Using current date: {date_due}')  # output what is being used to end user
-    return current, date_due
+class LogLevel(Enum):
+    DEBUG = 0
+    INFO = 1
+    WARNING = 2
+    ERROR = 3
+    CRITICAL = 4
 
 
-def check_date(date_inp: str):
-    """
-    Ensure proper date format
-    """
-    if not re.match(r'\d{4}-\d{2}-\d{2}', date_inp):
-        return False
-    return True
+class LogHandler:
+    def __init__(self, log_level: LogLevel) -> None:
+        self.log_level = log_level
+        self.log_file_handler = None
+        self.log_cache: dict[str, list] = {}
+        self.log_level_strings = {
+            LogLevel.DEBUG: 'DEBUG',
+            LogLevel.INFO: 'INFO',
+            LogLevel.WARNING: 'WARNING',
+            LogLevel.ERROR: 'ERROR',
+            LogLevel.CRITICAL: 'CRITICAL'
+        }
+        self.log_prefix = '%%DATETIME%% - [%%LOGLEVEL%%][%%CALLER%%]:'
+        self.prefix_ljust = 25
+        self.censored_strs = []
+
+    def open(self, log_file: str) -> None:
+        if self.log_file_handler is not None:
+            return
+        self.log_file_handler = open(log_file, 'w')
+
+    def _fill_prefix(self, log_level: LogLevel, caller_str: str) -> str:
+        current_datetime = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        return self.log_prefix.replace("%%DATETIME%%", current_datetime).replace("%%LOGLEVEL%%", self.log_level_strings[log_level]).replace('%%CALLER%%', caller_str).ljust(self.prefix_ljust)
+
+    def _censor_str(self, log_str: str) -> str:
+        for censored_str in self.censored_strs:
+            log_str = log_str.replace(censored_str, '<REDACTED>')
+        return log_str
+
+    def _append(self, log_level: LogLevel, log_str: str, caller: str | object = 'MAIN') -> None:
+        if log_level.value >= self.log_level.value:
+            caller_str = caller if isinstance(caller, str) else caller.__class__.__name__.upper()
+            if caller_str not in self.log_cache:
+                self.log_cache[caller_str] = []
+            self.log_cache[caller_str].append((log_level, self._censor_str(log_str)))
+
+    def _flush(self) -> None:
+        if self.log_file_handler is None:
+            return
+        for caller_str in self.log_cache:
+            for log_level, log_str in self.log_cache[caller_str]:
+                self._write(log_level, log_str, caller_str, flush=False)
+            self.log_cache[caller_str].clear()
+
+    def _write(self, log_level: LogLevel, log_str: str, caller: str | object = 'MAIN', flush: bool = True) -> None:
+        if self.log_file_handler is None:
+            return
+        if flush:
+            self._flush()
+        caller_str = caller if isinstance(caller, str) else caller.__class__.__name__.upper()
+        prefix = self._fill_prefix(log_level, caller_str)
+        if log_level.value >= self.log_level.value:
+            self.log_file_handler.write(f'{prefix}{self._censor_str(log_str)}\n')
+
+    def debug(self, log_str: str, caller: str | object = 'MAIN', flush: bool = True) -> None:
+        if self.log_file_handler is None:
+            self._append(LogLevel.DEBUG, log_str, caller)
+        else:
+            self._write(LogLevel.DEBUG, log_str, caller, flush)
+
+    def info(self, log_str: str, caller: str | object = 'MAIN', flush: bool = True) -> None:
+        if self.log_file_handler is None:
+            self._append(LogLevel.INFO, log_str, caller)
+        else:
+            self._write(LogLevel.INFO, log_str, caller, flush)
+
+    def warning(self, log_str: str, caller: str | object = 'MAIN', flush: bool = True) -> None:
+        if self.log_file_handler is None:
+            self._append(LogLevel.WARNING, log_str, caller)
+        else:
+            self._write(LogLevel.WARNING, log_str, caller, flush)
+
+    def error(self, log_str: str, caller: str | object = 'MAIN', flush: bool = True) -> None:
+        if self.log_file_handler is None:
+            self._append(LogLevel.ERROR, log_str, caller)
+        else:
+            self._write(LogLevel.ERROR, log_str, caller, flush)
+
+    def critical(self, log_str: str, caller: str | object = 'MAIN', flush: bool = True) -> None:
+        if self.log_file_handler is None:
+            self._append(LogLevel.CRITICAL, log_str, caller)
+        else:
+            self._write(LogLevel.CRITICAL, log_str, caller, flush)
+
+    def print_and_log(self, log_str: str, log_level: LogLevel, caller: str | object = 'MAIN', flush: bool = True) -> None:
+        if self.log_file_handler is None:
+            self._append(log_level, log_str, caller)
+        else:
+            self._write(log_level, log_str, caller, flush)
+        print(log_str)
+
+    def close(self) -> None:
+        if self.log_file_handler is None:
+            return
+        self._flush()
+        self.log_file_handler.close()
+        self.log_file_handler = None
+
+
+STATUS_LJUST = 40
+class RepoStatus(Enum):
+    '''
+    Enum for repo status
+    tuple values = (int value, friendly print string, color, status means done)
+    '''
+    RESET_ERROR = (-5, "Reset Error".ljust(STATUS_LJUST), LIGHT_RED, True)
+    CLONE_ERROR = (-4, "Clone Error".ljust(STATUS_LJUST), LIGHT_RED, True)
+    ACTIVITY_ERROR = (-3, "Activity Error".ljust(STATUS_LJUST), LIGHT_RED, True)
+    RETRIEVE_ERROR = (-2, "Retrieve Error".ljust(STATUS_LJUST), LIGHT_RED, True)
+    ERROR = (-1, "Unknown Error".ljust(STATUS_LJUST), LIGHT_RED, True)
+    INIT = (0, "Initial State".ljust(STATUS_LJUST), WHITE, False)
+    RETRIEVING = (1, "Retrieving...".ljust(STATUS_LJUST), WHITE, False)
+    RETRIEVED = (2, "Repo Found.".ljust(STATUS_LJUST), WHITE, False)
+    NOT_FOUND = (3, "Repo Does Not Exist.".ljust(STATUS_LJUST), YELLOW, True)
+    CHECKING_COMMITS = (4, "Checking Commits...".ljust(STATUS_LJUST), WHITE, False)
+    COMMIT_FOUND = (5, "Commit Found.".ljust(STATUS_LJUST), WHITE, False)
+    NO_COMMITS = (6, "Repo Has No Commits.".ljust(STATUS_LJUST), YELLOW, True)
+    COMMIT_NOT_FOUND = (7, "Commit Not Found Before Due Datetime.".ljust(STATUS_LJUST), YELLOW, True)
+    CLONING = (8, "Cloning...".ljust(STATUS_LJUST), WHITE, False)
+    CLONED = (9, "Cloned".ljust(STATUS_LJUST), WHITE, False)
+    CLONED_DONE = (9, "Cloned".ljust(STATUS_LJUST), WHITE, True)
+    RESETTING = (10, "Resetting...".ljust(STATUS_LJUST), WHITE, False)
+    RESET = (11, "Reset".ljust(STATUS_LJUST), WHITE, True)
 
 
 class GitHubAPIClient:
-    def __init__(self, context, auth_token: str, organization: str) -> None:
+    def __init__(self, auth_token: str, organization: str, log_handler: LogHandler) -> None:
         self.__organization = organization
         self.__auth_token = auth_token
-        self.context = context
         self.headers = {
             'Accept': 'application/vnd.github+json',
             'Authorization': f'Bearer {self.__auth_token}',
@@ -132,675 +258,726 @@ class GitHubAPIClient:
 
         self.push_params = {'activity_type': 'push,force_push', 'order': 'desc', 'per_page': 100, 'page': 1}
         self.commit_params = {'per_page': 1, 'page': 1}
-
-        self.assignment_repos = {}
-        self.assignment_students_accepted = {}
-        self.assignment_students_not_accepted = {}
-        self.assignment_students_no_commit = {}
-        self.assignment_students_seen = {}
-        self.assignment_output_log = {}
-        self.assignment_flags = {}
-
-        self.students = None
-        self.loaded_csv = None
-        if self.context is not None:
-            self.students = get_students(self.context.config_manager.config.students_csv)
-            self.loaded_csv = self.context.config_manager.config.students_csv
-        self.log_file_handler = None
-        self.clone_log = []
-        self.reset_log = []
-        self.current_pull = False
+        self.log_handler = log_handler
+        self.debug = self.log_handler.log_level == LogLevel.DEBUG
         self.session = None
-
-    def __repr__(self):
-        return pformat_objects(self.__dict__).replace(self.context.config_manager.config.token, 'REDACTED')
 
     def is_authorized(self) -> tuple:
         """
-        Check if auth token is valid
+        Check if auth token is valid by querying organization endpoint
         """
-        import httpx
-        import orjson
+        import niquests
+        import orjson as jsonbackend
 
         org_url = f'https://api.github.com/orgs/{self.__organization}'
         try:
-            response = httpx.get(org_url, headers=self.headers, timeout=10)
-            org_auth = orjson.loads(response.content).get('total_private_repos', False)
+            response = niquests.get(org_url, headers=self.headers, timeout=10)
+            org_auth = jsonbackend.loads(response.content).get('total_private_repos', False)
             if not org_auth:
                 return False, response.status_code
         except TimeoutError:
             raise ConnectionError('Connection timed out.') from None
         return True, response.status_code
 
-    async def assignment_exists(self, assignment_name: str) -> tuple:
+    def repo_prefix_exists(self, repo_prefix: str) -> tuple:
         """
         Check if assignment exists
         """
-        import orjson
+        import orjson as jsonbackend
 
-        if not assignment_name:
+        if not repo_prefix:
             return True, -1
         params = dict(self.repo_params)
         params['per_page'] = 1
-        params['q'] = f'{assignment_name} ' + params['q']
+        params['q'] = f'{repo_prefix} ' + params['q']
         url = 'https://api.github.com/search/repositories'
-        response = await self.__async_request(url, params)
+        response = self.sync_request(url, params)
         if response.status_code != 200:
             return 0
-        repo_json = orjson.loads(response.content)
+        repo_json = jsonbackend.loads(response.content)
         if repo_json.get('total_count', 0) == 0:
             return 0
         return repo_json['total_count']
 
-    def print_and_log(self, message: str, assignment_name: str, color: str = WHITE):
-        print(f'{color}{message}{WHITE}')
-        self.assignment_output_log[assignment_name].append(message)
-
-    async def __async_request(self, url: str, params: dict = None):
-        import httpx
+    def sync_request(self, url: str, params: dict = None):
+        import niquests
 
         if self.session is None:
-            self.session = httpx.AsyncClient(http1=False, http2=True)
+            self.session = niquests.Session(pool_maxsize=1000, multiplexed=True, disable_http1=True)
+            if self.debug:
+                self.log_handler.info('Session Created.', self)
+                self.log_handler.debug('*** SESSION ***', self)
+                self.log_handler.debug(pformat_objects(self.session), self)
+                self.log_handler.debug('*' * 50, self)
+        if params is None:
+            params = {}
 
-        response = await self.session.get(f'{url}?{urlencode(params)}', headers=self.headers)
-        if self.log_file_handler is not None:
-            self.log_file_handler.write('*** ASYNC REQUEST ***\n')
-            self.log_file_handler.write(f'{pformat_objects(locals())}\n'.replace(self.context.config_manager.config.token, 'REDACTED'))
-            self.log_file_handler.write(f'{pformat_objects(response)}\n\n\n'.replace(self.context.config_manager.config.token, 'REDACTED'))
+        url = f'{url}?{urlencode(params)}'
+        response = self.session.get(url, headers=self.headers)
+        if self.debug:
+            self.log_handler.debug(f'*** API RESPONSE [URL={url}] ***', self)
+            self.log_handler.debug(pformat_objects(response), self)
+            self.log_handler.debug('*' * 50, self)
         return response
 
-    async def fetch_all_pages(self, base_url: str, params: dict):
-        import orjson
+    def get_page_by_number(self, base_url: str, params: dict, page: int):
+        params = dict(params)
+        params['page'] = page
+        return self.sync_request(base_url, params)
 
-        page = 1
-        while True:
-            params['page'] = page
-            response = await self.__async_request(base_url, params)
-            if response.status_code != 200:
-                break
+    def fetch_all_pages(self, base_url: str, params: dict):
+        import orjson as jsonbackend
 
-            data = orjson.loads(response.content)
-            items = None
-            if isinstance(data, dict):
-                items = data.get('items', [])
-            elif isinstance(data, list):
-                items = data
-            if not items:
-                break
+        # Get first page
+        response = self.get_page_by_number(base_url, params, 1)
+        data = jsonbackend.loads(response.content)
+        items = None
+        if isinstance(data, dict):
+            items = data.get('items', [])
+        elif isinstance(data, list):
+            items = data
+        if not items:
+            yield data
+            return # required to exit generator
 
-            # Yield the entire page's worth of items
+        last_page = get_page_by_rel(response.headers.get('link', ''), 'last')
+        if not last_page:
             yield items
+            return # required to exit generator
+        yield items
 
-            # Check if there's another page available
-            links = response.headers.get('link', '')
-            last_page = get_page_by_rel(links, 'last')
-            if not last_page or page >= last_page:
-                break
-            page += 1
+        # Get remaining pages
+        with ThreadPoolExecutor(max_workers=(os.cpu_count() * 1.25) if not self.debug else 1) as executor:
+            futures = [executor.submit(self.get_page_by_number, base_url, params, page) for page in range(2, last_page + 1)]
+            for future in as_completed(futures):
+                response = future.result()
+                data = jsonbackend.loads(response.content)
+                items = None
+                if isinstance(data, dict):
+                    items = data.get('items', [])
+                elif isinstance(data, list):
+                    items = data
+                yield items
 
-    def __get_adjusted_due_datetime(self, repo, due_date: str, due_time: str) -> tuple:
-        pull_flags = self.assignment_flags[repo['assignment_name']]
-        is_ca = pull_flags[0]
-        is_as = pull_flags[1]
-        is_ex = pull_flags[2]
-        student_params = StudentParam('', '', 0, 0, 0)
-        for student in self.context.config_manager.config.extra_student_parameters:
-            if repo['name'].endswith(student.github):
-                student_params = student
-                break
-
-        hours_adjust = 0
-        if is_ca:
-            hours_adjust = student_params.class_activity_adj
-        elif is_as:
-            hours_adjust = student_params.assignment_adj
-        elif is_ex:
-            hours_adjust = student_params.exam_adj
-
-        date_due_tmp = None
-        time_due_tmp = None
-        if hours_adjust > 0:
-            due_datetime = datetime.strptime(f'{due_date} {due_time}', '%Y-%m-%d %H:%M')
-            due_datetime += timedelta(hours=hours_adjust)
-            due_datetime_strip = due_datetime.strftime('%Y-%m-%d %H:%M').split(' ')
-            date_due_tmp = due_datetime_strip[0]
-            time_due_tmp = due_datetime_strip[1]
-        else:
-            date_due_tmp = due_date
-            time_due_tmp = due_time
-
-        due_datetime = datetime.strptime(f'{date_due_tmp} {time_due_tmp}', '%Y-%m-%d %H:%M') - timedelta(hours=UTC_OFFSET)  # convert to UTC
-        time_diff = due_datetime.hour - due_datetime.astimezone(CURRENT_TIMEZONE).hour  # check if current time's Daylight Savings Time is different from due date/time
-        is_dst_diff = time_diff != 0
-        if is_dst_diff:
-            due_datetime -= timedelta(hours=time_diff)
-        # want to get pushes that happened before due date/time, so add a minute to due date/time
-        due_datetime = due_datetime + timedelta(minutes=1)
-        return due_datetime
-
-    def __get_commit_from_pushes(self, due_datetime: datetime, pushes: dict) -> str:
+    def get_commit_before_by_pushes(self, datetime: datetime, pushes: dict) -> str:
         for push in pushes:
             push_time = datetime.strptime(push['timestamp'], '%Y-%m-%dT%H:%M:%SZ')
-            if push_time < due_datetime:
+            if push_time < datetime:
                 return push['after']
         return None
 
-    async def __get_pushed_count_fast(self, repo) -> int:
-        import orjson
+    def get_push_count(self, repo: 'GitHubRepo') -> int:
+        if repo.status != RepoStatus.RETRIEVED:
+            return None
+        repo.status = RepoStatus.CHECKING_COMMITS
 
+        import orjson as jsonbackend
         params = dict(self.push_params)
-        url = f'{repo["url"]}/activity'
-        response = await self.__async_request(url, params)
+        url = f'{repo.repo_info["url"]}/activity'
+        response = self.sync_request(url, params)
         if response.status_code != 200:
+            repo.status = RepoStatus.ACTIVITY_ERROR
             return -1
-        pushes = orjson.loads(response.content)
+        pushes = jsonbackend.loads(response.content)
+        num_pushes = len(pushes)
+        if num_pushes == 0:
+            repo.status = RepoStatus.NO_COMMITS
         return len(pushes)
 
-    async def __get_push_info(self, repo, due_date, due_time) -> tuple[str, int]:
+    def get_commit_before_by_repo(self, datetime: datetime, repo: 'GitHubRepo') -> tuple[str, int]:
         # TODO: Support github classroom team repos, owned by the org, check "teams_url", and then "members_url" in repo json to get students in team
-        params = dict(self.push_params)
-        # params['actor'] = repo['student_github']
-
-        due_datetime = self.__get_adjusted_due_datetime(repo, due_date, due_time)  # adjust based on student parameters, Timezone, and DST
-        # GitHub API {owner}/{repo}/activity endpoint allows to query all pushes for a repo by a user
-        url = f'{repo["url"]}/activity'
-        num_pushes = 0
-        async for pushes in self.fetch_all_pages(url, params):
-            num_pushes += len(pushes)
-            commit_hash = self.__get_commit_from_pushes(due_datetime, pushes)
-            if commit_hash is not None:
-                return commit_hash, num_pushes
-        return None, num_pushes
-
-    async def _validate_repo_fields(self, repo: dict, due_date: str, due_time: str) -> dict | None:
-        """
-        Checks commit/push information for the given repo.
-        Returns the repo dict if it's valid, or None if it's invalid or has no commits.
-        """
-        student_name = repo['student_name']
-        student_github = repo['student_github']
-
-        # Decide which push info method to call
-        if not self.current_pull:
-            commit_hash, push_count = await self.__get_push_info(repo, due_date, due_time)
-        else:
-            # "Fast" approach: just check how many pushes exist
-            push_count = await self.__get_pushed_count_fast(repo)
-            commit_hash = '-1'  # Assign a default to indicate "current pull"
-
-        repo['due_commit_hash'] = commit_hash
-
-        # If push_count <= 0, no commits exist in the repo
-        if push_count <= 0:
-            self.assignment_students_no_commit[repo['assignment_name']].add((student_name, student_github))
-            return None
-
-        # If there's no valid commit before due date/time, treat as not accepted
-        if commit_hash is None:
-            self.assignment_students_not_accepted[repo['assignment_name']].add((student_name, student_github))
-            return None
-
-        # Otherwise, repo is valid
-        return repo
-
-    async def __add_valid_repos(self, assignment_name: str, due_date: str, due_time: str, repos: list[dict]) -> None:
-        """
-        Filters and validates a list of repo dictionaries, ensuring they:
-        1. Belong to a student in self.students.
-        2. Have a valid commit hash before the due date/time (unless we're in current_pull mode).
-        3. Actually have commits (push_count > 0).
-
-        Valid repos are appended to self.assignment_repos[assignment_name].
-        """
-        tasks = []
-        for repo in repos:
-            # 1. Filter out repos whose 'name' doesn't match a known student
-            student_github = repo['name'].replace(f'{assignment_name}-', '')
-            if student_github not in self.students:
-                continue
-
-            # 2. Populate needed fields
-            student_name = self.students[student_github]
-            repo['student_name'] = student_name
-            repo['student_github'] = student_github
-            repo['new_name'] = repo['name'].replace(student_github, student_name)
-            repo['assignment_name'] = assignment_name
-
-            # Track this student as having accepted (until proven otherwise)
-            self.assignment_students_accepted[assignment_name].add((student_name, student_github))
-
-            # 3. Schedule a task to validate commit/push info for each repo
-            tasks.append(asyncio.create_task(self._validate_repo_fields(repo, due_date, due_time)))
-
-        # 4. Run all validations concurrently
-        validated_repos = await asyncio.gather(*tasks)
-
-        # 5. Append valid repos to our assignment_repos list
-        for valid_repo in validated_repos:
-            # _validate_repo_fields returns None if invalid
-            if valid_repo is None:
-                continue
-            self.assignment_students_seen[assignment_name].add((valid_repo['student_name'], valid_repo['student_github']))
-            self.assignment_repos[assignment_name].append(valid_repo)
-
-    async def __rollback_repo(self, repo):
-        """
-        Use commit hash and reset local repo to that commit (use git reset instead of git checkout to remove detached head warning)
-        """
         try:
-            # run process on system that executes 'git reset' command. stdout is redirected so it doesn't output to end user
-            # git reset is similar to checkout but doesn't care about detached heads and is more forceful
-            # cmd = f'git reset --hard {repo["due_commit_hash"]}'
-            cmd = ['git', 'reset', '--hard', repo['due_commit_hash']]
-            stdout, stderr, exitcode = await run(cmd, repo['local_path'])
-            if self.context.config_manager.config.debug:
-                self.reset_log.append(f'*** ROLLBACK REPO [{repo["name"]}] ***\n{stdout}\n{stderr}\n{exitcode=}\n')
-            repo['is_rolled_back'] = True
-        except Exception:
-            self.print_and_log(
-                f'{LIGHT_RED}[{repo["name"]}] Rollback Failed: Likely invalid filename at commit `{repo["due_commit_hash"]}`.{WHITE}',
-                repo['assignment_name'],
-            )
+            if repo.status != RepoStatus.RETRIEVED:
+                return None
+            repo.status = RepoStatus.CHECKING_COMMITS
+            params = dict(self.push_params)
+            # params['actor'] = repo['student_github']
 
-    async def get_repos(self, assignment_name: str, due_date: str, due_time: str, refresh: bool = False):
+            # datetime = self.get_adjusted_due_datetime(repo, due_date, due_time)  # adjust based on student parameters, Timezone, and DST
+            # GitHub API {owner}/{repo}/activity endpoint allows to query all pushes for a repo by a user
+            url = f'{repo.repo_info["url"]}/activity'
+            num_pushes = 0
+            for pushes in self.fetch_all_pages(url, params):
+                num_pushes += len(pushes)
+                commit_hash = self.get_commit_before_by_pushes(datetime, pushes)
+                if commit_hash is not None:
+                    repo.status = RepoStatus.COMMIT_FOUND
+                    return commit_hash
+            if num_pushes == 0:
+                repo.status = RepoStatus.NO_COMMITS
+            else:
+                repo.status = RepoStatus.COMMIT_NOT_FOUND
+            return None
+        except Exception as _:
+            repo.status = RepoStatus.ACTIVITY_ERROR
+
+    def get_repo(self, repo_name: str) -> dict:
+        import orjson as jsonbackend
+        response = self.sync_request(f'https://api.github.com/repos/{self.__organization}/{repo_name}')
+        return response.status_code, jsonbackend.loads(response.content)
+
+    def search_repos(self, repo_prefix: str):
         """
         Return all repos that have at least one commit before due date/time
         and are from students in class roster and are only for the desired assignment
         """
         params = dict(self.repo_params)
-        if assignment_name in self.assignment_repos and not refresh:
-            return self.assignment_repos[assignment_name]
 
-        if assignment_name:
-            params['q'] = f'{assignment_name} ' + params['q']
-
-        self.assignment_repos[assignment_name] = []
-        self.assignment_students_accepted[assignment_name] = set()
-        self.assignment_students_not_accepted[assignment_name] = set()
-        self.assignment_students_no_commit[assignment_name] = set()
-        self.assignment_students_seen[assignment_name] = set()
-        self.assignment_output_log[assignment_name] = []
+        if repo_prefix:
+            params['q'] = f'{repo_prefix} ' + params['q']
 
         url = 'https://api.github.com/search/repositories'
-        async for repos in self.fetch_all_pages(url, params):
-            await self.__add_valid_repos(assignment_name, due_date, due_time, repos)
-            if len(self.assignment_students_seen[assignment_name]) == len(self.students):
-                break
+        for repo_infos in self.fetch_all_pages(url, params):
+            for repo_info in repo_infos:
+                yield repo_info
 
-        for student_github in self.students:
-            student_tuple = (self.students[student_github], student_github)
-            if student_tuple not in self.assignment_students_accepted[assignment_name]:
-                self.assignment_students_not_accepted[assignment_name].add((self.students[student_github], student_github))
-        return self.assignment_repos[assignment_name]
+    def get_repo_of_users(self, repo_prefix: str, usernames: list | dict):
+        import orjson as jsonbackend
 
-    async def __clone_repo(self, repo: dict, path: Path) -> None:
-        """
-        Clones the given repo into `path / repo["new_name"]`.
-        If clone is successful and `self.current_pull` is False (and not dry_run),
-        attempts to roll back the repo to the due date/time commit hash.
-        """
-        destination_path = str(Path(path) / repo['new_name'])
-        self.print_and_log(
-            f'    > Cloning [{repo["name"]}] {repo["new_name"]}...',
-            repo['assignment_name'],
-        )
+        base_url = f'https://api.github.com/repos/{self.__organization}/'
+        with ThreadPoolExecutor(max_workers=(os.cpu_count() * 1.25) if not self.debug else 1) as executor:
+            futures = {executor.submit(self.sync_request, f'{base_url}{repo_prefix}-{username}', {}): username for username in usernames}
+            for future in as_completed(futures):
+                response = future.result()
+                yield response.status_code, jsonbackend.loads(response.content)
 
-        # 1. Build the git clone command
-        cmd = self._build_clone_cmd(repo, destination_path)
+    def close(self):
+        if self.session is not None:
+            self.session.close()
+            self.session = None
+        if self.log_handler is not None:
+            self.log_handler.close()
+            self.log_handler = None
 
-        # 2. If dry_run, skip the actual clone
-        if self.context.dry_run:
-            repo['local_path'] = destination_path
-            return
 
-        # 3. Attempt the clone (with automatic retry on failure)
-        success = await self._attempt_clone(repo, cmd)
+class GitHubRepo:
+    def __init__(self, api_client: GitHubAPIClient, repo_info: dict = None, status: RepoStatus = RepoStatus.INIT, prefix: str = None, real_name: str = None, username: str = None, local_path: str = None, hours_adjust: int = 0) -> None:
+        self.repo_info = repo_info
+        self.prefix = prefix
+        self.real_name = real_name
+        self.username = username
+        self.local_path = local_path
+        self.status = status
+        self.out_name = f'{self.prefix}-{self.real_name}'
+        self.status = RepoStatus.INIT
+        self.api_client = api_client
+        self.hours_adjust = timedelta(hours=hours_adjust)
 
-        # 4. If clone fails or we’re in a current pull, do nothing else
-        if not success or self.current_pull:
-            repo['local_path'] = destination_path
-            return
+    def __repr__(self):
+        return f'<GitHubRepo: {self.prefix}-{self.username}, status={self.status}, hours_adjust={self.hours_adjust}, repo_info={self.repo_info}>'
 
-        # 5. Otherwise, roll back the repo
-        repo['local_path'] = destination_path
-        await self.__rollback_repo(repo)
+    def get_info(self):
+        self.status = RepoStatus.RETRIEVING
+        response_status_code, self.repo_info = self.api_client.get_repo(f'{self.prefix}-{self.username}')
+        if response_status_code == 200:
+            self.status = RepoStatus.RETRIEVED
+        elif response_status_code == 404:
+            self.status = RepoStatus.NOT_FOUND
+        else:
+            self.status = RepoStatus.RETRIEVE_ERROR
+        return self
 
-    def _build_clone_cmd(self, repo: dict, destination_path: str) -> list[str]:
-        """
-        Returns a list containing the git clone command.
-        Injects the auth token and decides whether to clone shallow (--depth=1) or not.
-        """
-        clone_url = repo['clone_url'].replace('https://', f'https://{self.__auth_token}@')
-        base_cmd = ['git', 'clone', '--single-branch']
+    def get_commit_before(self, datetime: datetime):
+        return self.api_client.get_commit_before_by_repo(datetime + self.hours_adjust, self)
 
-        if self.current_pull:
-            # Shallow clone if pulling 'current' state
-            base_cmd.extend(['--depth', '1'])
+    def clone(self, auth_token, out_dir: Path | str, depth: int = None, single_branch: bool = True, use_cloned_done: bool = False, dry_run: bool = False):
+        self.status = RepoStatus.CLONING
+        clone_url = self.repo_info['clone_url'].replace('https://', f'https://{auth_token}@')
+        cmd = ['git', 'clone']
+        if single_branch:
+            cmd.append('--single-branch')
+        if depth is not None:
+            cmd.extend(['--depth', str(depth)])
+        cmd.extend([clone_url, self.out_name])
+        self.local_path = Path(out_dir) / self.out_name
+        stdout, stderr, exitcode = None, None, 0
+        if not dry_run:
+            stdout, stderr, exitcode = run_cmd(cmd, cwd=out_dir)
+        if exitcode == 0:
+            self.status = RepoStatus.CLONED if not use_cloned_done else RepoStatus.CLONED_DONE
+        else:
+            self.status = RepoStatus.CLONE_ERROR
+        return stdout, stderr, exitcode
 
-        base_cmd.extend([clone_url, destination_path])
-        return base_cmd
+    def reset(self, commit_hash: str, dry_run: bool = False):
+        self.status = RepoStatus.RESETTING
+        cmd = ['git', 'reset', '--hard', '-q', commit_hash]
+        stdout, stderr, exitcode = None, None, 0
+        if not dry_run:
+            stdout, stderr, exitcode = run_cmd(cmd, cwd=self.local_path)
+        if exitcode == 0:
+            self.status = RepoStatus.RESET
+        else:
+            self.status = RepoStatus.RESET_ERROR
+        return stdout, stderr, exitcode
 
-    async def _attempt_clone(self, repo: dict, cmd: list[str]) -> bool:
-        """
-        Attempts to clone the repo. If it fails, retries once automatically,
-        then repeatedly prompts the user if they'd like to retry again.
-        Logs output if debug is enabled.
-        Returns True if the clone eventually succeeds, False otherwise.
-        """
-        max_automatic_retries = 1
+    def clone_and_reset(self, auth_token, commit_hash, out_dir: Path | str, depth: int = None, single_branch: bool = True, dry_run: bool = False):
+        clone_stdout, clone_stderr, clone_exitcode = self.clone(auth_token, out_dir, depth, single_branch, dry_run=dry_run)
+        if clone_exitcode != 0:
+            return (clone_stdout, clone_stderr, clone_exitcode), (None, None, None)
+        reset_stdout, reset_stderr, reset_exitcode = self.reset(commit_hash, dry_run=dry_run)
+        return (clone_stdout, clone_stderr, clone_exitcode), (reset_stdout, reset_stderr, reset_exitcode)
 
-        for i in range(max_automatic_retries + 1):
-            success = await self._run_clone_command(repo, cmd)
-            if success:
-                return True
-            # If this wasn't the last automatic retry, keep going
-            if i < max_automatic_retries:
-                continue
 
-            # Prompt the user for further retries if the clone continues failing
-            while True:
-                if not bool_prompt('Would you like to retry?', True):
-                    return False
-                if await self._run_clone_command(repo, cmd):
-                    return True
+def repo_status_print_loop(repos: list[GitHubRepo], max_name_len: int, max_user_len: int):
+    i = 0
+    # Continue to print until all repos have a status that means they have no more work to do
+    while not all(repo.status.value[3] for repo in repos):
+        if i == 0:
+            i += 1
+            for _, repo in enumerate(repos):
+                base_str = build_repo_and_info_str(repo, repo.status.value[1], max_name_len, max_user_len, color=repo.status.value[2])
+                print(f'  > {base_str}')
+        vals = range(len(repos), -1, -1)
+        for i, repo in enumerate(repos):
+            base_str = build_repo_and_info_str(repo, repo.status.value[1], max_name_len, max_user_len, color=repo.status.value[2])
+            print_positional_line(f'  > {base_str}', vals[i])
+    for i, repo in enumerate(repos):
+        base_str = build_repo_and_info_str(repo, repo.status.value[1], max_name_len, max_user_len, color=repo.status.value[2])
+        print_positional_line(f'  > {base_str}', vals[i])
 
-        return False  # If we somehow exit the loop without success
 
-    async def _run_clone_command(self, repo: dict, cmd: list[str]) -> bool:
-        """
-        Executes the git clone command once. Returns True if successful, False otherwise.
-        Logs stdout/stderr if debug is enabled.
-        """
-        stdout, stderr, exitcode = await run(cmd)
-        if self.context.config_manager.config.debug:
-            self.clone_log.append(f'*** CLONE REPO [{repo["name"]}] ***\n{stdout}\n{stderr}\nexitcode={exitcode}\n')
+def get_utc_w_daylight_savings_adjustment(due_date: str, due_time: str) -> datetime:
+    due_datetime = datetime.strptime(f'{due_date} {due_time}', '%Y-%m-%d %H:%M') - timedelta(hours=UTC_OFFSET)  # convert to UTC
+    time_diff = due_datetime.hour - due_datetime.astimezone(CURRENT_TIMEZONE).hour  # check if current time's Daylight Savings Time is different from due date/time
+    is_dst_diff = time_diff != 0
+    if is_dst_diff:
+        due_datetime -= timedelta(hours=time_diff)
+    # want to get pushes that happened before due date/time, so add a minute to due date/time
+    due_datetime = due_datetime + timedelta(minutes=1)
+    return due_datetime
 
-        if exitcode != 0:
-            # Print the error on the last forced attempt
-            self.print_and_log(
-                f'{LIGHT_RED}[{repo["name"]}] Clone Failed:\n{stderr}\n{WHITE}',
-                repo['assignment_name'],
-            )
-            return False
 
-        return True
+def make_unique_path(path: Path) -> Path:
+    if not path.exists():
+        os.makedirs(path)
+        return path
+    path_str = str(path)
+    i = 1
+    while path.exists():
+        path = Path(f'{path_str}_{i}')
+        i += 1
+    os.makedirs(path)
+    return path
 
-    async def pull_assignment_repos(self, assignment_name: str, path: Path | str):
-        """
-        Clones and roles back all repos for a given assignment to the due date/time
-        """
-        if assignment_name not in self.assignment_repos:
-            raise KeyError(f'Assignment `{assignment_name}` not found. Please run `get_repos` first')
-        for student in self.assignment_students_not_accepted[assignment_name]:
-            self.print_and_log(
-                f'    > {LIGHT_RED}Skipping [{student[1]}] {student[0]}: Assignment not accepted before due date/time.{WHITE}',
-                assignment_name,
-            )
-        for student in self.assignment_students_no_commit[assignment_name]:
-            self.print_and_log(
-                f'    > {LIGHT_RED}Skipping [{student[1]}] {student[0]}: Repo has no commits.{WHITE}',
-                assignment_name,
-            )
-        tasks = []
-        for repo in self.assignment_repos[assignment_name]:
-            task = asyncio.ensure_future(self.__clone_repo(repo, path))
-            tasks.append(task)
-        await asyncio.gather(*tasks)
 
-    def print_pull_report(self, assignment_name, exec_time: float) -> str:
-        """
-        Give end-user somewhat detailed report of what repos were able to be cloned, how many students accepted the assignments, etc.
-        """
-        done_str = f'{LIGHT_GREEN}Done in {round(exec_time, 2)} seconds.{WHITE}'
-        total_assignment_repos = len(self.assignment_repos[assignment_name])
+def onerror(func, path: str, exc_info) -> None:
+    import stat
 
-        num_not_accepted = len(self.assignment_students_not_accepted[assignment_name])
-        num_accepted = len(self.students) - num_not_accepted
-        section_students = len(self.students)
-        accept_str = f'{LIGHT_GREEN}{num_accepted}{WHITE}' if num_accepted == section_students else f'{LIGHT_RED}{num_accepted}{WHITE}'
-        full_accept_str = f'{accept_str}{LIGHT_GREEN}/{len(self.students)} accepted the assignment before due datetime.{WHITE}'
+    if not os.access(path, os.W_OK):
+        os.chmod(path, stat.S_IWUSR)
+        func(path)
+    else:
+        raise
 
-        num_no_commits = len(self.assignment_students_no_commit[assignment_name])
-        commits_str = f'{LIGHT_GREEN}{num_no_commits}{WHITE}' if num_no_commits == 0 else f'{LIGHT_RED}{num_no_commits}{WHITE}'
-        full_commits_str = f'{commits_str}{LIGHT_GREEN}/{num_accepted} had no commits.'
 
-        cloned_num = 0
-        rolled_back_num = 0
-        for repo in self.assignment_repos[assignment_name]:
-            if repo.get('local_path', False):
-                cloned_num += 1
-            if repo.get('is_rolled_back', False):
-                rolled_back_num += 1
+def delete_files_in_dir(path: Path, dry_run: bool = False):
+    if Path(path).exists():
+        if dry_run:
+            num_files = len(os.listdir(path))
+            return num_files
+        else:
+            num_files = len(os.listdir(path))
+            for folder in os.listdir(path):
+                if (Path(path) / folder).is_dir():
+                    shutil.rmtree(Path(path) / folder, onexc=onerror)
+                else:
+                    os.remove(Path(path) / folder)
+            return num_files
 
-        clone_str = f'{LIGHT_GREEN}{cloned_num}{WHITE}' if cloned_num == total_assignment_repos else f'{LIGHT_RED}{cloned_num}{WHITE}'
-        full_clone_str = f'{LIGHT_GREEN}Cloned {clone_str}{LIGHT_GREEN}/{total_assignment_repos} repos.{WHITE}'
 
-        rolled_back_str = f'{LIGHT_GREEN}{rolled_back_num}{WHITE}' if rolled_back_num == cloned_num else f'{LIGHT_RED}{rolled_back_num}{WHITE}'
-        full_rolled_back_str = f'{LIGHT_GREEN}Rolled back {rolled_back_str}{LIGHT_GREEN}/{cloned_num} repos.{WHITE}'
+def get_repo_prefix(client: GitHubAPIClient) -> str:
+    """
+    Get assignment name from input. Does not accept empty input.
+    """
+    repo_prefix = input('Repo Prefix: ')  # get assignment name (repo prefix)
+    repo_count = client.repo_prefix_exists(repo_prefix)
+    while not repo_prefix or not repo_count:  # if input is empty ask again
+        if repo_prefix == 'quit()':
+            return repo_prefix
+        if not repo_count:
+            print(f'Repo prefix `{repo_prefix}` not found. Please try again.')
+        repo_prefix = input('Please input a repo prefix: ')
+        repo_count = client.repo_prefix_exists(repo_prefix)
+    return repo_prefix
 
-        print()
-        print(done_str)
-        print(full_accept_str)
+
+def create_vscode_workspace(parent_folder_path, repo_prefix, repos: list[GitHubRepo]):
+    workspace_path = Path(parent_folder_path) / f'{repo_prefix}.code-workspace'
+    with open(workspace_path, 'w') as f:
+        f.write('{\n')
+        f.write('    "folders": [\n')
+        for repo in sorted(repos, key=lambda x: x.out_name):
+            val = repo.out_name
+            f.write(f'        {{ "path": "{val}" }},\n')
+        f.write('    ],\n\t"settings": {}\n')
+        f.write('}\n')
+    print(f'{LIGHT_GREEN}VSCode workspace file created at {workspace_path}.{WHITE}')
+
+
+def extract_data_folder(initial_path, data_folder_name='data'):
+    repos = os.listdir(initial_path)
+    repo_to_check = repos[len(repos) - 1]
+    folders = os.listdir(Path(initial_path) / repo_to_check)
+    if data_folder_name in folders:
+        shutil.copytree(f'{str(Path(initial_path) / repo_to_check / data_folder_name)}', f'{str(Path(initial_path) / data_folder_name)}')
+        print(f'{LIGHT_GREEN}Data folder extracted to the output directory.{WHITE}',)
+
+
+def print_pull_report(students, num_repos, num_not_accepted, num_no_commits, num_cloned, num_reset, exec_time: float, dry_run: bool, current_pull: bool) -> str:
+    """
+    Give end-user somewhat detailed report of what repos were able to be cloned, how many students accepted the assignments, etc.
+    """
+    done_str = f'{LIGHT_GREEN}Done in {round(exec_time, 2)} seconds.{WHITE}'
+    total_assignment_repos = num_repos
+
+    num_accepted = len(students) - num_not_accepted
+    section_students = len(students)
+    accept_str = f'{LIGHT_GREEN}{num_accepted}{WHITE}' if num_accepted == section_students else f'{LIGHT_RED}{num_accepted}{WHITE}'
+    full_accept_str = f'{accept_str}{LIGHT_GREEN}/{len(students)} accepted the assignment before due datetime.{WHITE}'
+
+    commits_str = f'{LIGHT_GREEN}{num_no_commits}{WHITE}' if num_no_commits == 0 else f'{LIGHT_RED}{num_no_commits}{WHITE}'
+    full_commits_str = f'{commits_str}{LIGHT_GREEN}/{num_accepted} had no commits.'
+
+    clone_str = f'{LIGHT_GREEN}{num_cloned}{WHITE}' if num_cloned == total_assignment_repos else f'{LIGHT_RED}{num_cloned}{WHITE}'
+    full_clone_str = f'{LIGHT_GREEN}Cloned {clone_str}{LIGHT_GREEN}/{total_assignment_repos} repos.{WHITE}'
+
+    rolled_back_str = f'{LIGHT_GREEN}{num_reset}{WHITE}' if num_reset == num_cloned else f'{LIGHT_RED}{num_reset}{WHITE}'
+    full_rolled_back_str = f'{LIGHT_GREEN}Rolled back {rolled_back_str}{LIGHT_GREEN}/{num_reset} repos.{WHITE}'
+
+    print()
+    print(done_str)
+    print(full_accept_str)
+    if not current_pull:
         print(full_commits_str)
-        print(full_clone_str)
-        if not self.context.dry_run or not self.current_pull:
-            print(full_rolled_back_str)
-        print()
+    print(full_clone_str)
+    if not current_pull:
+        print(full_rolled_back_str)
+    print()
 
-        full_report_str = f'\n{done_str}\n{full_accept_str}\n{full_commits_str}\n{full_clone_str}\n{full_rolled_back_str}'
-        return full_report_str
+    full_report_str = f'\n{done_str}\n{full_accept_str}\n{full_commits_str}\n{full_clone_str}\n{full_rolled_back_str}'
+    return full_report_str
 
-    async def attempt_get_assignment(self):
-        """
-        Get assignment name from input. Does not accept empty input.
-        """
-        assignment_name = input('Assignment Name: ')  # get assignment name (repo prefix)
-        repo_count = await self.assignment_exists(assignment_name)
-        while not assignment_name or not repo_count:  # if input is empty ask again
-            if assignment_name == 'quit()':
-                return assignment_name
-            if not repo_count:
-                print(f'Assignment `{assignment_name}` not found. Please try again.')
-            assignment_name = input('Please input an assignment name: ')
-            repo_count = await self.assignment_exists(assignment_name)
-        return assignment_name
 
-    async def save_report(self, report):
-        clone_logs = self.context.config_manager.config.clone_history
-        clone_logs.append(report)
-        if len(clone_logs) > 8:
-            clone_logs = clone_logs[1:]
-        self.context.config_manager.set_config_value('clone_history', clone_logs)
+def get_time():
+    """
+    Get assignment due time from input.
+    """
+    valid_time_regex = VALID_TIME_REGEX
+    current = False
+    prompt = 'Time Due (24hr HH:MM, press `enter` for current): '
+    time_due = input(prompt)  # get time assignment was due
+    if not time_due:  # if time due is blank use current time
+        current = True
+        current_time = datetime.now()  # get current time
+        time_due = current_time.strftime('%H:%M')  # format current time into hour:minute 24hr format
+        print(f'Using current time: {time_due}')  # output what is being used to end user
+    else:
+        while not valid_time_regex.match(time_due):
+            print(f'{LIGHT_RED}Invalid time format. Please use 24hr HH:MM format.{WHITE}')
+            time_due = input(prompt)
+    return current, time_due
 
-    async def create_vscode_workspace(self, assignment_name, parent_folder_path):
-        workspace_path = Path(parent_folder_path) / f'{assignment_name}.code-workspace'
-        with open(workspace_path, 'w') as f:
-            f.write('{\n')
-            f.write('    "folders": [\n')
-            for repo in sorted(list(self.assignment_repos[assignment_name]), key=lambda x: x['new_name']):
-                val = repo['new_name']
-                f.write(f'        {{ "path": "{val}" }},\n')
-            f.write('    ],\n\t"settings": {}\n')
-            f.write('}\n')
-        self.print_and_log(
-            f'{LIGHT_GREEN}VSCode workspace file created at {workspace_path}.{WHITE}',
-            assignment_name,
-        )
 
-    async def extract_data_folder(self, assignment_name, initial_path, data_folder_name='data'):
-        repos = os.listdir(initial_path)
-        repo_to_check = repos[len(repos) - 1]
-        folders = os.listdir(Path(initial_path) / repo_to_check)
-        if data_folder_name in folders:
-            shutil.copytree(f'{str(Path(initial_path) / repo_to_check / data_folder_name)}', f'{str(Path(initial_path) / data_folder_name)}')
-            self.print_and_log(
-                f'{LIGHT_GREEN}Data folder extracted to the output directory.{WHITE}',
-                assignment_name,
-            )
+def get_date():
+    """
+    Get assignment due date from input.
+    """
+    valid_date_regex = VALID_DATE_REGEX
+    current = False
+    prompt = 'Date Due (format = yyyy-mm-dd, press `enter` for current): '
+    date_due = input(prompt)  # get due date
+    if not date_due:  # If due date is blank use current date
+        current = True
+        current_date = date.today()  # get current date
+        date_due = current_date.strftime('%Y-%m-%d')  # get current date in year-month-day format
+        print(f'Using current date: {date_due}')  # output what is being used to end user
+    else:
+        while not valid_date_regex.match(date_due):
+            print(f'{LIGHT_RED}Invalid date format. Please use yyyy-mm-dd format.{WHITE}')
+            date_due = input(prompt)
+    return current, date_due
 
-    async def run(self, preset: ClonePreset = None):
-        students_start = perf_counter()
-        students_path = self.context.config_manager.config.students_csv
-        if self.loaded_csv is None or self.students is None:
-            self.students = get_students(students_path)
-            self.loaded_csv = students_path
+
+def print_positional_line(text: str, y: int):
+    """
+    build text at a specific position y on the terminal
+    y = 0 is the bottom of the terminal
+    """
+    start_of_prev_line = "\033[F"
+    start_of_next_line = "\033[E"
+    print(f'{start_of_prev_line * y}{text}{start_of_next_line * y}', end='')
+
+
+def build_repo_and_info_str(repo: GitHubRepo, info: str, max_name_len: int, max_user_len: int, color: str = WHITE) -> str:
+    return f'{color}{repo.real_name.ljust(max_name_len)} : {repo.username.ljust(max_user_len)} : {info}{WHITE}'
+
+
+def get_repos_info(repos: list[GitHubRepo], debug: bool = False):
+    with ThreadPoolExecutor(max_workers=(os.cpu_count() * 1.25) if not debug else 1) as executor:
+        futures = [executor.submit(repo.get_info) for repo in repos]
+        for future in as_completed(futures):
+            yield future.result()
+
+
+def print_and_log(message, prints_log):
+    prints_log.append(message)
+    print(message)
+
+
+def save_report(report, config_manager):
+    clone_logs = config_manager.config.clone_history
+    clone_logs.append(report)
+    if len(clone_logs) > 8:
+        clone_logs = clone_logs[1:]
+    config_manager.set_config_value('clone_history', clone_logs)
+
+
+def main(preset = None, dry_run = None, config_manager = None):
+    gc.disable()
+
+    start_1 = perf_counter()
+    prints_log = []
+    repos_created = False
+    students_path = config_manager.config.students_csv
+    access_token = config_manager.config.token
+    organization = config_manager.config.organization
+    debug = config_manager.config.debug
+    delete_duplicates = config_manager.config.replace_clone_duplicates
+
+    log_handler = LogHandler(LogLevel.DEBUG if debug else LogLevel.CRITICAL)
+    log_handler.censored_strs.append(access_token)
+    client = GitHubAPIClient(access_token, organization, log_handler)
+    stop_1 = perf_counter()
+    try:
         if preset is None:
             preset = ClonePreset('', '', '', students_path, False, (0, 0, 0))
             preset.append_timestamp = bool_prompt(
                 'Append timestamp to repo folder name?',
-                not self.context.config_manager.config.replace_clone_duplicates,
+                not config_manager.config.replace_clone_duplicates,
             )
-        if self.loaded_csv != preset.csv_path:
-            self.students = get_students(preset.csv_path)
-            self.loaded_csv = preset.csv_path
-        students_stop = perf_counter()
-        students_time = students_stop - students_start
+        else:
+            students_path = preset.csv_path
+        start_2 = perf_counter()
+        students = get_students(students_path)
+        append_timestamp = preset.append_timestamp
+        folder_suffix = preset.folder_suffix
+        stop_2 = perf_counter()
 
-        assignment_name = await self.attempt_get_assignment()  # prompt and verify assignment name
-        if assignment_name == 'quit()':
+        repo_prefix = get_repo_prefix(client)
+        if repo_prefix == 'quit()':
             return
-        # due_tag = ''
-        # if self.clone_via_tag:
-        #     due_tag = attempt_get_tag()
-
-        #     if preset.append_timestamp:
-        #         preset.folder_suffix += f'_{due_tag}'
 
         flags = preset.clone_type  # (class activity, assignment, exam)
-        if preset.clone_type is None:
-            for param in self.context.config_manager.config.extra_student_parameters:
-                if param.github in self.students:
-                    print(f'{LIGHT_GREEN}Student found in extra parameters.{WHITE}')
-                    res = input(f'Is this for a {LIGHT_GREEN}class activity(ca){WHITE}, {LIGHT_GREEN}assignment(as){WHITE}, or {LIGHT_GREEN}exam(ex){WHITE}? ')
-                    while res != 'ca' and res != 'as' and res != 'ex':
-                        res = input(f'Is this for a {LIGHT_GREEN}class activity(ca){WHITE}, {LIGHT_GREEN}assignment(as){WHITE}, or {LIGHT_GREEN}exam(ex){WHITE}? ')
-                    if res == 'ca':
-                        flags = (1, 0, 0)
-                    elif res == 'as':
-                        flags = (0, 1, 0)
-                    elif res == 'ex':
-                        flags = (0, 0, 1)
-                    break
+        students_adjust = {}
+        for param in config_manager.config.extra_student_parameters:
+            param: StudentParam
+            if param.github not in students:
+                continue
+            if flags is None:
+                print(f'{LIGHT_GREEN}Student found in extra parameters.{WHITE}')
+                res = input(f'Is this for a {LIGHT_GREEN}class activity(ca){WHITE}, {LIGHT_GREEN}assignment(as){WHITE}, or {LIGHT_GREEN}exam(ex){WHITE}? ').lower()
+                while res != 'ca' and res != 'as' and res != 'ex':
+                    res = input(f'Is this for a {LIGHT_GREEN}class activity(ca){WHITE}, {LIGHT_GREEN}assignment(as){WHITE}, or {LIGHT_GREEN}exam(ex){WHITE}? ').lower()
+                    # is_ca = flags[0]
+                    # is_as = flags[1]
+                    # is_ex = flags[2]
+                if res == 'ca':
+                    flags = (1, 0, 0)
+                elif res == 'as':
+                    flags = (0, 1, 0)
+                elif res == 'ex':
+                    flags = (0, 0, 1)
+            hours_adjust = 0
+            if flags[0]:
+                hours_adjust = param.class_activity_hours
+            elif flags[1]:
+                hours_adjust = param.assignment_hours
+            elif flags[2]:
+                hours_adjust = param.exam_hours
+            students_adjust[param.github] = hours_adjust
 
-        self.assignment_flags[assignment_name] = flags
+        current_pull = False
+        if debug:
+            log_handler.info('*** Starting Parameters ***')
+            log_handler.info(f'Access Token: {access_token}')
+            log_handler.info(f'Students CSV: {students_path}')
+            log_handler.info(f'Organization: {organization}')
+            log_handler.info(f'Dry Run: {dry_run}')
+            log_handler.info(f'Current Pull: {current_pull}')
+            log_handler.info(f'Delete Duplicates: {delete_duplicates}')
+            log_handler.info(f'Append Timestamp: {append_timestamp}')
+            log_handler.info(f'Folder Suffix: {folder_suffix}')
+            log_handler.info(f'Students: {students}')
+
+        max_name_len = max([len(students[student]) for student in students])
+        max_user_len = max([len(student) for student in students])
 
         due_date = ''
-        # if not self.clone_via_tag:
+        due_time = ''
         time_is_current = False
         if not preset.clone_time:
-            time_is_current, preset.clone_time = get_time()
+            time_is_current, due_time = get_time()
+        else:
+            due_time = preset.clone_time
 
         date_is_current, due_date = get_date()
-        while not check_date(due_date):
-            due_date = get_date()
 
         if date_is_current and time_is_current:
-            self.current_pull = True
+            current_pull = True
 
-        if preset.append_timestamp:
+        if append_timestamp:
             date_str = due_date[4:].replace('-', '_')
             time_str = preset.clone_time.replace(':', '_')
-            preset.folder_suffix += f'_{date_str}_{time_str}'
-        # end if
+            folder_suffix += f'_{date_str}_{time_str}'
 
-        pull_start_1 = perf_counter()
-        i = 0
-        parent_folder_path = f'{self.context.config_manager.config.out_dir}/{assignment_name}{preset.folder_suffix}'  # prompt parent folder (IE assingment_name-AS in config.out_dir)
-        while Path(parent_folder_path).exists() and not self.context.config_manager.config.replace_clone_duplicates:
-            i += 1
-            parent_folder_path = f'{self.context.config_manager.config.out_dir}/{assignment_name}{preset.folder_suffix}_iter_{i}'
+        due_datetime = get_utc_w_daylight_savings_adjustment(due_date, due_time)
+        if date_is_current and time_is_current:
+            current_pull = True
 
-        if Path(parent_folder_path).exists() and self.context.config_manager.config.replace_clone_duplicates:
-            if self.context.dry_run:
-                num_files = len(os.listdir(parent_folder_path))
-                print(f'{CYAN}[INFO]: Would have deleted {num_files} files/folders in {parent_folder_path}.{WHITE}')
+        if debug:
+            log_handler.info(f'Assignment Name: {repo_prefix}')
+            log_handler.info(f'Due Date: {due_date}')
+            log_handler.info(f'Due Time: {due_time}')
+            log_handler.info(f'Adjusted Due Datetime: {due_datetime}')
+
+        if append_timestamp:
+            date_str = due_date[4:].replace('-', '_')
+            time_str = due_time.replace(':', '_')
+            folder_suffix += f'_{date_str}_{time_str}'
+
+        start_3 = perf_counter()
+        out_dir = Path(f'{config_manager.config.out_dir}/{repo_prefix}{folder_suffix}')
+        if out_dir.exists() and not delete_duplicates:
+            out_dir = make_unique_path(out_dir)
+        elif out_dir.exists() and delete_duplicates:
+            if debug:
+                log_handler.info(f'Deleting files in {out_dir}')
+            num_files_deleted = delete_files_in_dir(out_dir, dry_run)
+            if dry_run:
+                print_and_log(f'{CYAN}[INFO]: Would have deleted {num_files_deleted} files/folders in {out_dir}.{WHITE}')
             else:
-                num_files = len(os.listdir(parent_folder_path))
-                print(f'{CYAN}[INFO]: Will delete {num_files} files/folders in {parent_folder_path}.{WHITE}')
-                for folder in os.listdir(parent_folder_path):
-                    if (Path(parent_folder_path) / folder).is_dir():
-                        shutil.rmtree(Path(parent_folder_path) / folder, onexc=onerror)
-                    else:
-                        os.remove(Path(parent_folder_path) / folder)
+                print_and_log(f'{CYAN}[INFO]: Deleted {num_files_deleted} files/folders in {out_dir}.{WHITE}', prints_log)
+        elif not dry_run:
+            os.makedirs(out_dir)
 
-        if not self.context.dry_run and not Path(parent_folder_path).exists():
-            os.mkdir(parent_folder_path)
-        pull_stop_1 = perf_counter()
+        if debug:
+            log_handler.info(f'Output directory: {out_dir}')
+            log_handler.open(f'{out_dir}/log.txt')
+            log_handler._flush()
 
-        if self.context.config_manager.config.debug:
-            self.log_file_handler = open(str(Path(parent_folder_path) / 'log.txt'), 'w')
-            self.log_file_handler.write(f'*** Globals ***\n{pformat_objects(globals())}\n\n\n*** Locals ***\n{pformat_objects(locals())}*** Clone Details ***\n'.replace(self.context.config_manager.config.token, 'REDACTED'))
-        skip_flag = False
-        while True:
-            pull_start_2 = perf_counter()
-            repos = await self.get_repos(assignment_name, due_date, preset.clone_time, refresh=True)  # get repos for assignment
-            pull_stop_2 = perf_counter()
-            if len(repos) > 0:
-                break
-            if len(repos) == 0 and (len(self.assignment_students_no_commit) > 0 or len(self.assignment_students_not_accepted) > 0):
-                skip_flag = True
-                break
-            print(f'{LIGHT_RED}No students have accepted the assignment `{assignment_name}`.{WHITE}')
-            print('Please try again or type `quit()` to return to the clone menu.')
-            tmp_flags = self.assignment_flags[assignment_name]
-            del self.assignment_flags[assignment_name]
-            del self.assignment_repos[assignment_name]
-            del self.assignment_students_accepted[assignment_name]
-            del self.assignment_students_not_accepted[assignment_name]
-            del self.assignment_students_no_commit[assignment_name]
-            del self.assignment_output_log[assignment_name]
-            assignment_name = await self.attempt_get_assignment()
-            if assignment_name == 'quit()':
-                return
-            self.assignment_flags[assignment_name] = tmp_flags
+        outdir_str = f'Output directory: {out_dir}'
+        print_and_log(f'{outdir_str}', prints_log)
+        stop_3 = perf_counter()
 
-        print()
+        num_repos = 0
+        num_not_accepted = 0
+        num_no_commit = 0
+        num_cloned = 0
+        num_reset = 0
+        skip_flag = True
+        pull_start = perf_counter()
+        repos = [GitHubRepo(client, prefix=repo_prefix, username=student_github, real_name=students[student_github]) for student_github in students]
+        repos_created = True
+        for repo in repos:
+            if repo.username in students_adjust:
+                repo.hours_adjust = students_adjust[repo.username]
+        p_thread = None
+        if not debug:
+            from threading import Thread
+            p_thread = Thread(target=repo_status_print_loop, args=(repos, max_name_len, max_user_len), daemon=True)
+            p_thread.start()
+        with ThreadPoolExecutor(max_workers=int((os.cpu_count() * 1.5) if not debug else 1)) as executor:
+            get_futures = {}
+            if current_pull:
+                get_futures = {executor.submit(client.get_push_count, repo): repo
+                            for repo in get_repos_info(repos)}
+            else:
+                get_futures = {
+                    executor.submit(client.get_commit_before_by_repo, due_datetime, repo): repo
+                    for repo in get_repos_info(repos)
+                }
+            clone_futures = {}
+            for future in as_completed(get_futures):
+                due_commit = future.result()
+                repo: GitHubRepo = get_futures[future]
+                if debug:
+                    log_handler.info(f'Get Future Done: {due_commit}, repo={pformat_objects(repo)}')
+                if repo.status == RepoStatus.NOT_FOUND:
+                    num_not_accepted += 1
+                    continue
+                num_repos += 1
+                if repo.status == RepoStatus.NO_COMMITS:
+                    num_no_commit += 1
+                    continue
+                if repo.status == RepoStatus.COMMIT_NOT_FOUND:
+                    num_not_accepted += 1
+                    continue
+                if not current_pull:
+                    skip_flag = False
+                    clone_futures[executor.submit(repo.clone_and_reset, access_token, due_commit, out_dir, dry_run=dry_run)] = repo
+                else:
+                    skip_flag = False
+                    clone_futures[executor.submit(repo.clone, access_token, out_dir, depth=1, use_cloned_done=True, dry_run=dry_run)] = repo
 
-        pull_start_3 = perf_counter()
-        outdir = parent_folder_path[len(self.context.config_manager.config.out_dir) + 1 :]
-        outdir_str = f'Output directory: {outdir}'
-        self.print_and_log(outdir_str, assignment_name)
-        await self.pull_assignment_repos(assignment_name, parent_folder_path)
-        if not skip_flag and not self.context.dry_run:
-            await self.extract_data_folder(assignment_name, parent_folder_path)
-        pull_stop_3 = perf_counter()
-        pull_time = (pull_stop_3 - pull_start_3) + (pull_stop_2 - pull_start_2) + (pull_stop_1 - pull_start_1)
+            for future in as_completed(clone_futures):
+                clone_result, reset_result = None, None
+                if not dry_run and not current_pull:
+                    clone_result, reset_result = future.result()
+                elif not dry_run and current_pull:
+                    clone_result = future.result()
+                repo: GitHubRepo = clone_futures[future]
+                if debug:
+                    log_handler.info(f'Clone Future Done: {clone_result}, {reset_result}, repo={pformat_objects(repo)}')
+                if clone_result is not None and clone_result[2] == 0:
+                    num_cloned += 1
+                if reset_result is not None and reset_result[2] == 0:
+                    num_reset += 1
+        if not debug:
+            p_thread.join()
+            log_handler.info('Repo status print thread done.')
+        pull_stop = perf_counter()
+        ellapsed_time = (pull_stop - pull_start) + (stop_1 - start_1) + (stop_2 - start_2) + (stop_3 - start_3)
+        if not skip_flag:
+            extract_data_folder(out_dir)
+            create_vscode_workspace(out_dir, repo_prefix, repos)
+        report_str = print_pull_report(students, num_repos, num_not_accepted, num_no_commit, num_cloned, num_reset, ellapsed_time, dry_run, current_pull)
+        if debug:
+            log_handler.info(report_str)
+            for repo in repos:
+                log_handler.info(pformat_objects(repo))
 
-        ellapsed_time = pull_time + students_time
-        end_report_str = self.print_pull_report(assignment_name, ellapsed_time)
-        self.assignment_output_log[assignment_name].append(end_report_str)
-        if not skip_flag and not self.context.dry_run:
-            await self.create_vscode_workspace(assignment_name, parent_folder_path)
+        for repo in repos:
+            repo_final_output = f'  > {build_repo_and_info_str(repo, repo.status.value[1], max_name_len, max_user_len, color=repo.status.value[2])}'
+            prints_log.append(repo_final_output)
+        prints_log.append((''))
 
-        report = CloneReport(
-            assignment_name,
-            due_date,
-            preset.clone_time,
+        prints_log.append(report_str)
+
+        clone_report = CloneReport(
+            repo_prefix, due_date, due_time,
             datetime.today().strftime('%Y-%m-%d'),
-            datetime.now().strftime('%H:%M'),
-            self.context.dry_run,
-            str(students_path),
-            tuple(self.assignment_output_log[assignment_name]),
+            datetime.now().strftime('%H:%M'), dry_run, students_path,
+            prints_log
         )
 
-        self.current_pull = False
-        await self.save_report(report)
+        save_report(clone_report, config_manager)
 
-        if self.log_file_handler is not None and self.context.config_manager.config.debug:
-            self.log_file_handler.writelines(self.clone_log)
-            self.log_file_handler.writelines(self.reset_log)
+    except (KeyboardInterrupt, Exception) as e:
+        if repos_created:
+            for repo in repos:
+                if repo.status.value[3]:
+                    continue
+                repo.status = RepoStatus.ERROR
+        if debug:
+            log_handler.critical(f'Error: {e}')
+            log_handler.critical(format_exc())
+        print(f'{LIGHT_RED}Error: {e}{WHITE}')
+    finally:
+        log_handler.close()
+        client.close()
+        gc.collect()
 
-        del self.assignment_repos[assignment_name]
-        del self.assignment_students_accepted[assignment_name]
-        del self.assignment_students_not_accepted[assignment_name]
-        del self.assignment_students_no_commit[assignment_name]
-        del self.assignment_output_log[assignment_name]
-        del self.assignment_flags[assignment_name]
-        del self.assignment_students_seen[assignment_name]
-        self.clone_log = []
-        self.reset_log = []
-        await self.session.aclose()
-        if self.log_file_handler is not None:
-            self.log_file_handler.close()
-        self.log_file_handler = None
-        self.session = None
+
+if __name__ == '__main__':
+    main()

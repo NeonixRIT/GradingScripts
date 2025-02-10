@@ -2,8 +2,7 @@ from utils import get_color_from_status
 
 from tuiframeworkpy import Menu, Event, MenuOption
 from tuiframeworkpy import LIGHT_GREEN, LIGHT_RED, WHITE
-
-from .github_client import GitHubAPIClient
+from tuiframeworkpy.model.utils import BareGitHubAPIClient
 
 MAX_THREADS = 200
 
@@ -27,12 +26,11 @@ class MainMenu(Menu):
     def load(self):
         self.name = f'GCIS Grading Scripts {get_color_from_status(self.context.update_status)}v{self.__version}{WHITE}'
         try:
-            self.client = GitHubAPIClient(
-                self.context,
-                self.context.config_manager.config.token,
+            client = BareGitHubAPIClient()
+            authorized, resp_code = client.is_authorized(
                 self.context.config_manager.config.organization,
+                self.context.config_manager.config.token
             )
-            authorized, resp_code = self.client.is_authorized()
             if not authorized:
                 print(f'{LIGHT_RED}FATAL: GitHub API Authorization failed. Make sure your token is valid and has the correct permissions.\nResponse Code: {resp_code}{WHITE}')
                 raise ValueError(f'GitHub API Authorization failed. Make sure your token is valid and has the correct permissions.\nResponse Code: {resp_code}')

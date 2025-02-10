@@ -27,55 +27,20 @@ class BareGitHubAPIClient:
             'X-GitHub-Api-Version': '2022-11-28',
         }
 
-    def __request(self, url: str, params: dict = None):
-        import httpx
+    def is_authorized(self, organization: str, token: str):
+        import niquests
+        import orjson as jsonbackend
 
-        url = f'{url}?{urlencode(params)}' if params else url
-        return httpx.get(url, headers=self.headers)
-
-    def get_commits(self, repo, params: dict = None):
-        if repo is None:
-            return None
-        params = {'page': 1, 'per_page': 100}
-        response = self.__request(repo.commits_url[:-6], params)
-        if response.status_code != 200:
-            return None
-        commits = response.json(object_hook=lambda d: SimpleNamespace(**d))
-        if 'Link' not in response.headers:
-            return commits
-        page_limit = get_page_by_rel(response.headers['Link'])
-        if not page_limit:
-            return commits
-        for page_num in range(2, page_limit + 1):
-            params['page'] = page_num
-            response = self.__request(repo.commits_url[:-6], params)
-            commits.extend(response.json(object_hook=lambda d: SimpleNamespace(**d)))
-        return commits
-
-    def get_repo(self, owner, repo_name, params: dict = None):
-        response = self.__request(f'https://api.github.com/repos/{owner}/{repo_name}', params)
-        if response.status_code != 200:
-            return None
-        return response.json(object_hook=lambda d: SimpleNamespace(**d))
-
-    def get_releases(self, repo):
-        if repo is None:
-            return None
-        params = {'page': 1, 'per_page': 100}
-        response = self.__request(repo.releases_url[:-5], params)
-        if response.status_code != 200:
-            return None
-        releases = response.json(object_hook=lambda d: SimpleNamespace(**d))
-        if 'Link' not in response.headers:
-            return releases
-        page_limit = get_page_by_rel(response.headers['Link'])
-        if not page_limit:
-            return releases
-        for page_num in range(2, page_limit + 1):
-            params['page'] = page_num
-            response = self.__request(repo.releases_url[:-5], params)
-            releases.extend(response.json(object_hook=lambda d: SimpleNamespace(**d)))
-        return releases
+        self.headers['Authorization'] = f'token {token}'
+        org_url = f'https://api.github.com/orgs/{organization}'
+        try:
+            response = niquests.get(org_url, headers=self.headers, timeout=10)
+            org_auth = jsonbackend.loads(response.content).get('total_private_repos', False)
+            if not org_auth:
+                return False, response.status_code
+        except TimeoutError:
+            raise ConnectionError('Connection timed out.') from None
+        return True, response.status_code
 
 
 def get_application_folder():

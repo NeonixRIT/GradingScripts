@@ -7,7 +7,7 @@ import shutil
 import time
 
 from tuiframeworkpy import SubMenu, Event, MenuOption, LIGHT_GREEN, LIGHT_RED, WHITE
-from utils import walklevel, run
+from utils import walklevel, async_run_cmd
 
 from pathlib import Path
 
@@ -94,10 +94,10 @@ class AddMenu(SubMenu):
         await asyncio.gather(*tasks)
 
     async def do_git_workflow(self, repo_path, commit_message):
-        print(await run('git pull', repo_path))
-        print(await run('git add -A', repo_path))
-        print(await run(f'git commit -m "{commit_message}"', repo_path))
-        print(await run('git push', repo_path))
+        print(await async_run_cmd('git pull', repo_path))
+        print(await async_run_cmd('git add -A', repo_path))
+        print(await async_run_cmd(f'git commit -m "{commit_message}"', repo_path))
+        print(await async_run_cmd('git push', repo_path))
 
     async def do_all_git_workflow(self):
         tasks = []

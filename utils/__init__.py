@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import re
+import subprocess
 
 from tuiframeworkpy import LIGHT_GREEN, LIGHT_RED, CYAN, WHITE
 
@@ -116,17 +117,24 @@ def get_color_from_bool(boolean):
     return LIGHT_GREEN if boolean else LIGHT_RED
 
 
-async def run(cmd: str | list, cwd=None) -> tuple[str | None, str | None]:
+def run_cmd(cmd: str | list, cwd=None) -> tuple[str | None, str | None]:
+    """
+    Syncronously start a subprocess and run a command returning its output
+    """
+    if cwd is None:
+        cwd = os.getcwd()
+    proc = subprocess.Popen(cmd, cwd=cwd, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
+
+    stdout, stderr = proc.communicate()
+    return (stdout.decode().strip() if stdout else None, stderr.decode().strip() if stderr else None, proc.returncode)
+
+
+async def async_run_cmd(cmd: str | list, cwd=None) -> tuple[str | None, str | None]:
     """
     Asyncronously start a subprocess and run a command returning its output
     """
     if cwd is None:
         cwd = os.getcwd()
-
-    proc = None
-    # if isinstance(cmd, str):
-    #     proc = await asyncio.create_subprocess_shell(cmd, cwd=cwd, stderr=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE)
-    # elif isinstance(cmd, list):
     proc = await asyncio.create_subprocess_exec(*cmd, cwd=cwd, stderr=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE)
 
     stdout, stderr = await proc.communicate()

@@ -3,8 +3,9 @@ import shutil
 import os
 
 from .clone_preset import ClonePreset
+from .github_client import main
 
-from utils import get_color_from_bool, run, list_to_multi_clone_presets, onerror
+from utils import get_color_from_bool, async_run_cmd, list_to_multi_clone_presets, onerror
 from tuiframeworkpy import SubMenu, Event, MenuOption
 from tuiframeworkpy import LIGHT_RED, LIGHT_GREEN, WHITE
 
@@ -88,20 +89,9 @@ class CloneMenu(SubMenu):
         self.context.config_manager.set_config_value('clone_history', clone_logs)
 
     def clone_repos(self, preset: ClonePreset = None):
-        use_fast_loop = True
-        try:
-            if os.name != 'nt':
-                import uvloop as asyncbackend
-            else:
-                import winloop as asyncbackend
-        except ImportError:
-            use_fast_loop = False
+        dry_run = bool(self.dry_run)
+        main(preset, dry_run, self.context.config_manager)
 
-        self.context.dry_run = bool(self.dry_run)
-        if use_fast_loop:
-            asyncio.set_event_loop_policy(asyncbackend.EventLoopPolicy())
-        asyncio.run(self.client.run(preset))
-        del self.context.dry_run
 
     def build_preset_options(self) -> list:
         options = []
@@ -115,94 +105,3 @@ class CloneMenu(SubMenu):
             option = MenuOption(i + 1, preset.name, option_event, Event(), Event())
             options.append(option)
         return options
-
-
-def attempt_get_tag():
-    """
-    Get due tag name from input. Does not accept empty input.
-    """
-    assignment_name = input('Tag Name: ')  # get assignment name (repo prefix)
-    while not assignment_name:  # if input is empty ask again
-        assignment_name = input('Please input an assignment name: ')
-    return assignment_name
-
-
-class LocalRepo:
-    """
-    Object representing a cloned repo
-
-    Mostly legacy code
-    """
-
-    __slots__ = ['__path', '__old_name', '__new_name', '__remote_repo']
-
-    def __init__(self, path: str, old_name: str, new_name: str, remote_repo):
-        self.__path = path
-        self.__old_name = old_name
-        self.__new_name = new_name
-        self.__remote_repo = remote_repo
-
-    def __str__(self) -> str:
-        return self.__new_name
-
-    def __repr__(self) -> str:
-        return f'LocalRepo[path={self.__path}, old_name={self.__old_name}, new_name={self.__new_name}]'
-
-    def old_name(self) -> str:
-        return self.__old_name
-
-    async def reset_to_remote(self):
-        await run('git fetch --all')
-        await run(f'git reset --hard origin/{self.__remote_repo.default_branch}')
-        await run('git pull')
-
-    async def attempt_git_workflow(self, commit_message: str):
-        await run('git add *', self.__path)
-        await run(f'git commit -m "{commit_message}"', self.__path)
-        await run('git push', self.__path)
-
-    async def get_commit_hash(self, date_due: str, time_due: str) -> str:
-        """
-        Get commit hash at timestamp and reset local repo to timestamp on the default branch
-        """
-        try:
-            # run process on system that executes 'git rev-list' command. stdout is redirected so it doesn't output to end user
-            cmd = f'git log --max-count=1 --date=local --before="{date_due.strip()} {time_due.strip()}" --format=%H'
-            stdout, stderr = await run(cmd, self.__path)
-            return stdout
-        except Exception as e:
-            print(f'{LIGHT_RED}[{self}] Get Commit Hash Failed: Likely accepted assignment after given date/time.{WHITE}')
-            # await log_info('Get Commit Hash Failed', 'Likely accepted assignment after given date/time.', self, e)
-            raise e
-
-    async def rollback(self, commit_hash: str) -> bool:
-        """
-        Use commit hash and reset local repo to that commit (use git reset instead of git checkout to remove detached head warning)
-        """
-        try:
-            # run process on system that executes 'git reset' command. stdout is redirected so it doesn't output to end user
-            # git reset is similar to checkout but doesn't care about detached heads and is more forceful
-            cmd = f'git reset --hard {commit_hash}'
-            await run(cmd, self.__path)
-            return True
-        except Exception:
-            print(f'{LIGHT_RED}[{self}] Rollback Failed: Likely invalid filename at commit `{commit_hash}`.{WHITE}')
-            # await log_info('Rollback Failed', f'Likely invalid filename at commit `{commit_hash}`.', self, e)
-            return False
-
-    async def add(self, files_to_add: list[tuple[str, str, bool]], commit_message: str):
-        await self.reset_to_remote()
-
-        for path, filename, _ in files_to_add:
-            if filename.endswith('.zip'):
-                shutil.unpack_archive(path, f'{self.__path}/{filename[:-4]}')
-                continue
-            shutil.copy(path, self.__path)
-
-        await self.attempt_git_workflow(commit_message)
-
-    async def delete(self) -> None:
-        shutil.rmtree(self.__path, onexc=onerror)
-
-    async def get_stats(self) -> list:
-        raise NotImplementedError('This method has not been implemented.')
