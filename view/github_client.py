@@ -9,6 +9,7 @@ from .clone_preset import ClonePreset
 from .clone_report import CloneReport
 from .student_param import StudentParam
 from tuiframeworkpy import LIGHT_GREEN, LIGHT_RED, CYAN, WHITE, YELLOW
+from utils import clear
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from copy import deepcopy
@@ -961,6 +962,26 @@ def main(preset=None, dry_run=None, config_manager=None):
             log_handler.info('Repo status print thread done.')
         pull_stop = perf_counter()
         ellapsed_time = (pull_stop - pull_start) + (stop_1 - start_1) + (stop_2 - start_2) + (stop_3 - start_3)
+
+        clear()
+        print(f'Repo Prefix: `{repo_prefix}`')
+        print(f'Due Date: `{due_date}`')
+        print(f'Due Time: `{due_time}`')
+        print(f'Adjusted Due Datetime: `{due_datetime}`')
+        print(f'Current Pull: `{current_pull}`')
+        print(f'Dry Run: `{dry_run}`')
+        print(f'Append Timestamp: `{append_timestamp}`')
+        print(f'Folder Suffix: `{folder_suffix}`')
+        print(f'Output directory: `{out_dir}`')
+
+        for repo in repos:
+            repo_final_output = f'  > {build_repo_and_info_str(repo, repo.status.value[1], max_name_len, max_user_len, color=repo.status.value[2])}'
+            prints_log.append(repo_final_output)
+            print(repo_final_output)
+        prints_log.append((''))
+        print()
+        # TODO: CloneReport should have all above info plus the following pull report string
+
         if not skip_flag and not dry_run:
             extract_data_folder(out_dir)
             create_vscode_workspace(out_dir, repo_prefix, repos)
