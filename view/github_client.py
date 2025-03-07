@@ -784,7 +784,7 @@ def main(preset=None, dry_run=None, config_manager=None):
         folder_suffix = preset.folder_suffix
         stop_2 = perf_counter()
 
-        repo_prefix = get_repo_prefix(client, config_manager.config.clone_history[0].assignment_name)
+        repo_prefix = get_repo_prefix(client, config_manager.config.clone_history[-1].assignment_name)
         if repo_prefix == 'quit()':
             return
 
