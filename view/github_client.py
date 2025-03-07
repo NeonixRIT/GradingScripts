@@ -121,13 +121,7 @@ class LogHandler:
         self.log_level = log_level
         self.log_file_handler = None
         self.log_cache: dict[str, list] = {}
-        self.log_level_strings = {
-            LogLevel.DEBUG: 'DEBUG',
-            LogLevel.INFO: 'INFO',
-            LogLevel.WARNING: 'WARNING',
-            LogLevel.ERROR: 'ERROR',
-            LogLevel.CRITICAL: 'CRITICAL'
-        }
+        self.log_level_strings = {LogLevel.DEBUG: 'DEBUG', LogLevel.INFO: 'INFO', LogLevel.WARNING: 'WARNING', LogLevel.ERROR: 'ERROR', LogLevel.CRITICAL: 'CRITICAL'}
         self.log_prefix = '%%DATETIME%% - [%%LOGLEVEL%%][%%CALLER%%]:'
         self.prefix_ljust = 25
         self.censored_strs = []
@@ -139,7 +133,7 @@ class LogHandler:
 
     def _fill_prefix(self, log_level: LogLevel, caller_str: str) -> str:
         current_datetime = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        return self.log_prefix.replace("%%DATETIME%%", current_datetime).replace("%%LOGLEVEL%%", self.log_level_strings[log_level]).replace('%%CALLER%%', caller_str).ljust(self.prefix_ljust)
+        return self.log_prefix.replace('%%DATETIME%%', current_datetime).replace('%%LOGLEVEL%%', self.log_level_strings[log_level]).replace('%%CALLER%%', caller_str).ljust(self.prefix_ljust)
 
     def _censor_str(self, log_str: str) -> str:
         for censored_str in self.censored_strs:
@@ -217,29 +211,32 @@ class LogHandler:
 
 
 STATUS_LJUST = 40
+
+
 class RepoStatus(Enum):
-    '''
+    """
     Enum for repo status
     tuple values = (int value, friendly print string, color, status means done)
-    '''
-    RESET_ERROR = (-5, "Reset Error".ljust(STATUS_LJUST), LIGHT_RED, True)
-    CLONE_ERROR = (-4, "Clone Error".ljust(STATUS_LJUST), LIGHT_RED, True)
-    ACTIVITY_ERROR = (-3, "Activity Error".ljust(STATUS_LJUST), LIGHT_RED, True)
-    RETRIEVE_ERROR = (-2, "Retrieve Error".ljust(STATUS_LJUST), LIGHT_RED, True)
-    ERROR = (-1, "Unknown Error".ljust(STATUS_LJUST), LIGHT_RED, True)
-    INIT = (0, "Initial State".ljust(STATUS_LJUST), WHITE, False)
-    RETRIEVING = (1, "Retrieving...".ljust(STATUS_LJUST), WHITE, False)
-    RETRIEVED = (2, "Repo Found.".ljust(STATUS_LJUST), WHITE, False)
-    NOT_FOUND = (3, "Repo Does Not Exist.".ljust(STATUS_LJUST), YELLOW, True)
-    CHECKING_COMMITS = (4, "Checking Commits...".ljust(STATUS_LJUST), WHITE, False)
-    COMMIT_FOUND = (5, "Commit Found.".ljust(STATUS_LJUST), WHITE, False)
-    NO_COMMITS = (6, "Repo Has No Commits.".ljust(STATUS_LJUST), YELLOW, True)
-    COMMIT_NOT_FOUND = (7, "Commit Not Found Before Due Datetime.".ljust(STATUS_LJUST), YELLOW, True)
-    CLONING = (8, "Cloning...".ljust(STATUS_LJUST), WHITE, False)
-    CLONED = (9, "Cloned".ljust(STATUS_LJUST), WHITE, False)
-    CLONED_DONE = (9, "Cloned".ljust(STATUS_LJUST), WHITE, True)
-    RESETTING = (10, "Resetting...".ljust(STATUS_LJUST), WHITE, False)
-    RESET = (11, "Reset".ljust(STATUS_LJUST), WHITE, True)
+    """
+
+    RESET_ERROR = (-5, 'Reset Error'.ljust(STATUS_LJUST), LIGHT_RED, True)
+    CLONE_ERROR = (-4, 'Clone Error'.ljust(STATUS_LJUST), LIGHT_RED, True)
+    ACTIVITY_ERROR = (-3, 'Activity Error'.ljust(STATUS_LJUST), LIGHT_RED, True)
+    RETRIEVE_ERROR = (-2, 'Retrieve Error'.ljust(STATUS_LJUST), LIGHT_RED, True)
+    ERROR = (-1, 'Unknown Error'.ljust(STATUS_LJUST), LIGHT_RED, True)
+    INIT = (0, 'Initial State'.ljust(STATUS_LJUST), WHITE, False)
+    RETRIEVING = (1, 'Retrieving...'.ljust(STATUS_LJUST), WHITE, False)
+    RETRIEVED = (2, 'Repo Found.'.ljust(STATUS_LJUST), WHITE, False)
+    NOT_FOUND = (3, 'Repo Does Not Exist.'.ljust(STATUS_LJUST), YELLOW, True)
+    CHECKING_COMMITS = (4, 'Checking Commits...'.ljust(STATUS_LJUST), WHITE, False)
+    COMMIT_FOUND = (5, 'Commit Found.'.ljust(STATUS_LJUST), WHITE, False)
+    NO_COMMITS = (6, 'Repo Has No Commits.'.ljust(STATUS_LJUST), YELLOW, True)
+    COMMIT_NOT_FOUND = (7, 'Commit Not Found Before Due Datetime.'.ljust(STATUS_LJUST), YELLOW, True)
+    CLONING = (8, 'Cloning...'.ljust(STATUS_LJUST), WHITE, False)
+    CLONED = (9, 'Cloned'.ljust(STATUS_LJUST), WHITE, False)
+    CLONED_DONE = (9, 'Cloned'.ljust(STATUS_LJUST), WHITE, True)
+    RESETTING = (10, 'Resetting...'.ljust(STATUS_LJUST), WHITE, False)
+    RESET = (11, 'Reset'.ljust(STATUS_LJUST), WHITE, True)
 
 
 class GitHubAPIClient:
@@ -338,12 +335,12 @@ class GitHubAPIClient:
             items = data
         if not items:
             yield data
-            return # required to exit generator
+            return  # required to exit generator
 
         last_page = get_page_by_rel(response.headers.get('link', ''), 'last')
         if not last_page:
             yield items
-            return # required to exit generator
+            return  # required to exit generator
         yield items
 
         # Get remaining pages
@@ -372,6 +369,7 @@ class GitHubAPIClient:
         repo.status = RepoStatus.CHECKING_COMMITS
 
         import orjson as jsonbackend
+
         params = dict(self.push_params)
         url = f'{repo.repo_info["url"]}/activity'
         response = self.sync_request(url, params)
@@ -413,6 +411,7 @@ class GitHubAPIClient:
 
     def get_repo(self, repo_name: str) -> dict:
         import orjson as jsonbackend
+
         response = self.sync_request(f'https://api.github.com/repos/{self.__organization}/{repo_name}')
         return response.status_code, jsonbackend.loads(response.content)
 
@@ -593,11 +592,14 @@ def delete_files_in_dir(path: Path, dry_run: bool = False):
             return num_files
 
 
-def get_repo_prefix(client: GitHubAPIClient) -> str:
+def get_repo_prefix(client: GitHubAPIClient, prev_repo_prefix: str) -> str:
     """
-    Get assignment name from input. Does not accept empty input.
+    Get assignment name from input.
+    If input is empty, prompt to use previous value.
     """
-    repo_prefix = input('Repo Prefix: ')  # get assignment name (repo prefix)
+    repo_prefix = input('Repo Prefix (`enter` for previous value): ')  # get assignment name (repo prefix)
+    repo_prefix = repo_prefix if repo_prefix else prev_repo_prefix if bool_prompt(f'Use previous repo prefix: `{prev_repo_prefix}`?', True) else repo_prefix
+    prev_repo_prefix = repo_prefix
     repo_count = client.repo_prefix_exists(repo_prefix)
     while not repo_prefix or not repo_count:  # if input is empty ask again
         if repo_prefix == 'quit()':
@@ -605,6 +607,7 @@ def get_repo_prefix(client: GitHubAPIClient) -> str:
         if not repo_count:
             print(f'Repo prefix `{repo_prefix}` not found. Please try again.')
         repo_prefix = input('Please input a repo prefix: ')
+        repo_prefix = repo_prefix if repo_prefix else prev_repo_prefix if bool_prompt(f'Use previous repo prefix: `{prev_repo_prefix}`?', True) else repo_prefix
         repo_count = client.repo_prefix_exists(repo_prefix)
     return repo_prefix
 
@@ -628,7 +631,9 @@ def extract_data_folder(initial_path, data_folder_name='data'):
     folders = os.listdir(Path(initial_path) / repo_to_check)
     if data_folder_name in folders:
         shutil.copytree(f'{str(Path(initial_path) / repo_to_check / data_folder_name)}', f'{str(Path(initial_path) / data_folder_name)}')
-        print(f'{LIGHT_GREEN}Data folder extracted to the output directory.{WHITE}',)
+        print(
+            f'{LIGHT_GREEN}Data folder extracted to the output directory.{WHITE}',
+        )
 
 
 def print_pull_report(students, num_repos, num_not_accepted, num_no_commits, num_cloned, num_reset, exec_time: float, dry_run: bool, current_pull: bool) -> str:
@@ -711,8 +716,8 @@ def print_positional_line(text: str, y: int):
     build text at a specific position y on the terminal
     y = 0 is the bottom of the terminal
     """
-    start_of_prev_line = "\033[F"
-    start_of_next_line = "\033[E"
+    start_of_prev_line = '\033[F'
+    start_of_next_line = '\033[E'
     print(f'{start_of_prev_line * y}{text}{start_of_next_line * y}', end='')
 
 
@@ -748,7 +753,7 @@ def save_report(report, config_manager):
 #         pass
 
 
-def main(preset = None, dry_run = None, config_manager = None):
+def main(preset=None, dry_run=None, config_manager=None):
     gc.disable()
 
     start_1 = perf_counter()
@@ -779,7 +784,7 @@ def main(preset = None, dry_run = None, config_manager = None):
         folder_suffix = preset.folder_suffix
         stop_2 = perf_counter()
 
-        repo_prefix = get_repo_prefix(client)
+        repo_prefix = get_repo_prefix(client, config_manager.config.clone_history[0].assignment_name)
         if repo_prefix == 'quit()':
             return
 
@@ -900,18 +905,15 @@ def main(preset = None, dry_run = None, config_manager = None):
         p_thread = None
         if not debug:
             from threading import Thread
+
             p_thread = Thread(target=repo_status_print_loop, args=(repos, max_name_len, max_user_len), daemon=True)
             p_thread.start()
         with ThreadPoolExecutor(max_workers=int((os.cpu_count() * 1.5) if not debug else 1)) as executor:
             get_futures = {}
             if current_pull:
-                get_futures = {executor.submit(client.get_push_count, repo): repo
-                            for repo in get_repos_info(repos)}
+                get_futures = {executor.submit(client.get_push_count, repo): repo for repo in get_repos_info(repos)}
             else:
-                get_futures = {
-                    executor.submit(client.get_commit_before_by_repo, due_datetime, repo): repo
-                    for repo in get_repos_info(repos)
-                }
+                get_futures = {executor.submit(client.get_commit_before_by_repo, due_datetime, repo): repo for repo in get_repos_info(repos)}
             clone_futures = {}
             # check_dups_futures = {}
             for future in as_completed(get_futures):
@@ -975,12 +977,7 @@ def main(preset = None, dry_run = None, config_manager = None):
 
         prints_log.append(report_str)
 
-        clone_report = CloneReport(
-            repo_prefix, due_date, due_time,
-            datetime.today().strftime('%Y-%m-%d'),
-            datetime.now().strftime('%H:%M'), dry_run, students_path,
-            prints_log
-        )
+        clone_report = CloneReport(repo_prefix, due_date, due_time, datetime.today().strftime('%Y-%m-%d'), datetime.now().strftime('%H:%M'), dry_run, students_path, prints_log)
 
         save_report(clone_report, config_manager)
 
