@@ -25,7 +25,7 @@ from traceback import format_exc
 UTC_OFFSET = datetime.now(timezone.utc).astimezone().utcoffset() // timedelta(hours=1)
 CURRENT_TIMEZONE = timezone(timedelta(hours=UTC_OFFSET))
 VALID_TIME_REGEX = re.compile(r'^[0-2][0-9]:[0-5][0-9]$')
-VALID_DATE_REGEX = re.compile(r'^\d{4}-[0-1][0-2]-[0-3][0-9]$')
+VALID_DATE_REGEX = re.compile(r'^\d{4}-[0-1][0-9]-[0-3][0-9]$')
 
 
 def run_cmd(cmd: str | list, cwd=None) -> tuple[str | None, str | None]:
@@ -518,6 +518,13 @@ class GitHubRepo:
         reset_stdout, reset_stderr, reset_exitcode = self.reset(commit_hash, dry_run=dry_run)
         return (clone_stdout, clone_stderr, clone_exitcode), (reset_stdout, reset_stderr, reset_exitcode)
 
+    def find_duplicates(self):
+        repo_infos = self.api_client.search_repos(self.repo_info['name'])
+        for repo_info in repo_infos:
+            if repo_info['name'] == self.repo_info['name']:
+                continue
+            yield GitHubRepo(self.api_client, repo_info, self.status, self.prefix, self.real_name, self.username, self.local_path, self.hours_adjust)
+
 
 def repo_status_print_loop(repos: list[GitHubRepo], max_name_len: int, max_user_len: int):
     i = 0
@@ -733,6 +740,14 @@ def save_report(report, config_manager):
     config_manager.set_config_value('clone_history', clone_logs)
 
 
+# def handle_duplicates(dup_futures, dry_run, current_pull, debug):
+#     '''
+#     similar to main function but has its own print loop and repos list
+#     '''
+#     with ThreadPoolExecutor(max_workers=(os.cpu_count() * 1.25) if not debug else 1) as executor:
+#         pass
+
+
 def main(preset = None, dry_run = None, config_manager = None):
     gc.disable()
 
@@ -898,6 +913,7 @@ def main(preset = None, dry_run = None, config_manager = None):
                     for repo in get_repos_info(repos)
                 }
             clone_futures = {}
+            # check_dups_futures = {}
             for future in as_completed(get_futures):
                 due_commit = future.result()
                 repo: GitHubRepo = get_futures[future]
@@ -909,6 +925,7 @@ def main(preset = None, dry_run = None, config_manager = None):
                 num_repos += 1
                 if repo.status == RepoStatus.NO_COMMITS:
                     num_no_commit += 1
+                    # check_dups_futures[executor.submit(repo.find_duplicates)] = repo
                     continue
                 if repo.status == RepoStatus.COMMIT_NOT_FOUND:
                     num_not_accepted += 1
@@ -933,6 +950,10 @@ def main(preset = None, dry_run = None, config_manager = None):
                     num_cloned += 1
                 if reset_result is not None and reset_result[2] == 0:
                     num_reset += 1
+
+            # for future in as_completed(check_dups_futures):
+            #     for dup_repo in future.result():
+            #         print(f'{LIGHT_RED}Duplicate found: {dup_repo.out_name}{WHITE}')
         if not debug:
             p_thread.join()
             log_handler.info('Repo status print thread done.')
