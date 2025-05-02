@@ -193,7 +193,7 @@ def main():
     main_menu.options[1].on_select += lambda: tui.open_menu(clone_menu.id)
     find_option_by_prefix_text(clone_menu, 'Manage Presets').on_select += lambda: tui.open_menu(preset_menu.id)
     find_option_by_prefix_text(clone_menu, 'Clone History').on_select += lambda: tui.open_menu(clone_history_menu.id)
-    main_menu.options[4].on_select += lambda: tui.open_menu(config_menu.id)
+    main_menu.options[3].on_select += lambda: tui.open_menu(config_menu.id)
     main_menu.options[2].on_select += add_menu.run
 
     # Copy update script to path

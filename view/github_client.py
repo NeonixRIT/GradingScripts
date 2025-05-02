@@ -8,7 +8,7 @@ import gc
 from .clone_preset import ClonePreset
 from .clone_report import CloneReport
 from .student_param import StudentParam
-from tuiframeworkpy import LIGHT_GREEN, LIGHT_RED, CYAN, WHITE, YELLOW
+from tuiframeworkpy import LIGHT_GREEN, LIGHT_RED, CYAN, WHITE, YELLOW, MAGENTA
 from utils import clear
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -220,24 +220,30 @@ class RepoStatus(Enum):
     tuple values = (int value, friendly print string, color, status means done)
     """
 
-    RESET_ERROR = (-5, 'Reset Error'.ljust(STATUS_LJUST), LIGHT_RED, True)
-    CLONE_ERROR = (-4, 'Clone Error'.ljust(STATUS_LJUST), LIGHT_RED, True)
-    ACTIVITY_ERROR = (-3, 'Activity Error'.ljust(STATUS_LJUST), LIGHT_RED, True)
-    RETRIEVE_ERROR = (-2, 'Retrieve Error'.ljust(STATUS_LJUST), LIGHT_RED, True)
-    ERROR = (-1, 'Unknown Error'.ljust(STATUS_LJUST), LIGHT_RED, True)
-    INIT = (0, 'Initial State'.ljust(STATUS_LJUST), WHITE, False)
-    RETRIEVING = (1, 'Retrieving...'.ljust(STATUS_LJUST), WHITE, False)
-    RETRIEVED = (2, 'Repo Found.'.ljust(STATUS_LJUST), WHITE, False)
-    NOT_FOUND = (3, 'Repo Does Not Exist.'.ljust(STATUS_LJUST), YELLOW, True)
-    CHECKING_COMMITS = (4, 'Checking Commits...'.ljust(STATUS_LJUST), WHITE, False)
-    COMMIT_FOUND = (5, 'Commit Found.'.ljust(STATUS_LJUST), WHITE, False)
-    NO_COMMITS = (6, 'Repo Has No Commits.'.ljust(STATUS_LJUST), YELLOW, True)
-    COMMIT_NOT_FOUND = (7, 'Commit Not Found Before Due Datetime.'.ljust(STATUS_LJUST), YELLOW, True)
-    CLONING = (8, 'Cloning...'.ljust(STATUS_LJUST), WHITE, False)
-    CLONED = (9, 'Cloned'.ljust(STATUS_LJUST), WHITE, False)
-    CLONED_DONE = (9, 'Cloned'.ljust(STATUS_LJUST), WHITE, True)
-    RESETTING = (10, 'Resetting...'.ljust(STATUS_LJUST), WHITE, False)
-    RESET = (11, 'Reset'.ljust(STATUS_LJUST), WHITE, True)
+    # errors (only LIGHT_RED)
+    RESET_ERROR      = (-5, 'Reset Error'.ljust(STATUS_LJUST),    LIGHT_RED,  True)
+    CLONE_ERROR      = (-4, 'Clone Error'.ljust(STATUS_LJUST),    LIGHT_RED,  True)
+    ACTIVITY_ERROR   = (-3, 'Activity Error'.ljust(STATUS_LJUST), LIGHT_RED,  True)
+    RETRIEVE_ERROR   = (-2, 'Retrieve Error'.ljust(STATUS_LJUST), LIGHT_RED,  True)
+    ERROR            = (-1, 'Unknown Error'.ljust(STATUS_LJUST),  LIGHT_RED,  True)
+
+    # neutral/in-progress (WHITE)
+    INIT             = ( 0, 'Initial State'.ljust(STATUS_LJUST),       WHITE, False)
+    RETRIEVING       = ( 1, 'Retrieving...'.ljust(STATUS_LJUST),       WHITE, False)
+    CHECKING_COMMITS = ( 4, 'Checking Commits...'.ljust(STATUS_LJUST), WHITE, False)
+    CLONING          = ( 8, 'Cloning...'.ljust(STATUS_LJUST),          WHITE, False)
+    RESETTING        = (10, 'Resetting...'.ljust(STATUS_LJUST),        WHITE, False)
+
+    # success (GREEN)
+    RETRIEVED        = ( 2, 'Repo Found.'.ljust(STATUS_LJUST), LIGHT_GREEN,   False)
+    COMMIT_FOUND     = ( 5, 'Commit Found.'.ljust(STATUS_LJUST), LIGHT_GREEN, False)
+    CLONED_DONE      = ( 9, 'Cloned'.ljust(STATUS_LJUST), LIGHT_GREEN,         True)
+    RESET            = (11, 'Reset'.ljust(STATUS_LJUST), LIGHT_GREEN,          True)
+
+    # warnings, each with its own hue
+    NOT_FOUND        = ( 3, 'Repo Does Not Exist.'.ljust(STATUS_LJUST),  YELLOW,                  True)
+    NO_COMMITS       = ( 6, 'Repo Has No Commits.'.ljust(STATUS_LJUST),    CYAN,                  True)
+    COMMIT_NOT_FOUND = ( 7, 'Commit Not Found Before Due Datetime.'.ljust(STATUS_LJUST), MAGENTA, True)
 
 
 class GitHubAPIClient:
@@ -619,6 +625,8 @@ def create_vscode_workspace(parent_folder_path, repo_prefix, repos: list[GitHubR
         f.write('{\n')
         f.write('    "folders": [\n')
         for repo in sorted(repos, key=lambda x: x.out_name):
+            if repo.status != RepoStatus.CLONED_DONE and repo.status != RepoStatus.RESET:
+                continue
             val = repo.out_name
             f.write(f'        {{ "path": "{val}" }},\n')
         f.write('    ],\n\t"settings": {}\n')
@@ -1001,8 +1009,7 @@ def main(preset=None, dry_run=None, config_manager=None):
         clone_report = CloneReport(repo_prefix, due_date, due_time, datetime.today().strftime('%Y-%m-%d'), datetime.now().strftime('%H:%M'), dry_run, students_path, prints_log)
 
         save_report(clone_report, config_manager)
-
-    except (KeyboardInterrupt, Exception) as e:
+    except Exception as e:
         if repos_created:
             for repo in repos:
                 if repo.status.value[3]:
@@ -1012,6 +1019,9 @@ def main(preset=None, dry_run=None, config_manager=None):
             log_handler.critical(f'Error: {e}')
             log_handler.critical(format_exc())
         raise e
+    except KeyboardInterrupt:
+        print()
+        return
     finally:
         log_handler.close()
         client.close()
