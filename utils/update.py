@@ -30,12 +30,12 @@ def onerror(func, path, exc_info):
 
 
 def download_and_update(save_path):
-    import httpx
+    import niquests
 
     version = sys.argv[1]
     script_location = sys.argv[2]
     url = f'https://github.com/NeonixRIT/GradingScripts/archive/refs/tags/{version}.zip'
-    resp = httpx.get(url, stream=True)
+    resp = niquests.get(url, stream=True)
     with open(save_path, 'wb') as fd:
         for chunk in resp.iter_content(chunk_size=128):
             fd.write(chunk)

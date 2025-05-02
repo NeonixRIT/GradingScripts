@@ -53,9 +53,13 @@ class SubMenu(Menu):
         return not self.only_one_prompt, user_option_int, result
 
     def open(self):
-        self.on_enter()
-        handle_option_return = (True, 0, [])
-        while handle_option_return[0]:
-            user_input = self.get_option()
-            handle_option_return = self.handle_option(user_input)
-        clear()
+        try:
+            self.on_enter()
+            handle_option_return = (True, 0, [])
+            while handle_option_return[0]:
+                user_input = self.get_option()
+                handle_option_return = self.handle_option(user_input)
+        except KeyboardInterrupt:
+            self.__quit()
+        finally:
+            clear()
