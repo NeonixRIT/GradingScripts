@@ -11,8 +11,7 @@ Here is a brief guide for how to use the grading scripts for GCIS-123/124. In th
 
  NOTE: Required Python modules are installed at script start.
   - versionmanager.py: Check remote repo for updated release
-  - httpx: HTTP/2 Client
-  - uvloop/winloop: faster asynchronous event loop
+  - niquests: HTTP/2 Client
   - orjson: faster json parsing for API responses
 
 Before we get started with other things, let’s make sure you have installed what you need to actually run the scripts.
