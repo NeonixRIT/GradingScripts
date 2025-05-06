@@ -232,6 +232,7 @@ class RepoStatus(Enum):
     RETRIEVING       = ( 1, 'Retrieving...'.ljust(STATUS_LJUST),       WHITE, False)
     CHECKING_COMMITS = ( 4, 'Checking Commits...'.ljust(STATUS_LJUST), WHITE, False)
     CLONING          = ( 8, 'Cloning...'.ljust(STATUS_LJUST),          WHITE, False)
+    CLONED           = ( 9, 'Cloning...'.ljust(STATUS_LJUST),          WHITE, False)
     RESETTING        = (10, 'Resetting...'.ljust(STATUS_LJUST),        WHITE, False)
 
     # success (GREEN)
