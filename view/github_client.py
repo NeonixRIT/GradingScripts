@@ -605,19 +605,36 @@ def get_repo_prefix(client: GitHubAPIClient, prev_repo_prefix: str) -> str:
     Get assignment name from input.
     If input is empty, prompt to use previous value.
     """
-    repo_prefix = input('Repo Prefix (`enter` for previous value): ')  # get assignment name (repo prefix)
-    repo_prefix = repo_prefix if repo_prefix else prev_repo_prefix if bool_prompt(f'Use previous repo prefix: `{prev_repo_prefix}`?', True) else repo_prefix
-    prev_repo_prefix = repo_prefix
-    repo_count = client.repo_prefix_exists(repo_prefix)
-    while not repo_prefix or not repo_count:  # if input is empty ask again
-        if repo_prefix == 'quit()':
-            return repo_prefix
-        if not repo_count:
-            print(f'Repo prefix `{repo_prefix}` not found. Please try again.')
-        repo_prefix = input('Please input a repo prefix: ')
+    if prev_repo_prefix:
+        repo_prefix = input('Repo Prefix (`enter` for previous value): ')  # get assignment name (repo prefix)
         repo_prefix = repo_prefix if repo_prefix else prev_repo_prefix if bool_prompt(f'Use previous repo prefix: `{prev_repo_prefix}`?', True) else repo_prefix
+        prev_repo_prefix = repo_prefix
         repo_count = client.repo_prefix_exists(repo_prefix)
-    return repo_prefix
+        while not repo_prefix or not repo_count:  # if input is empty ask again
+            if repo_prefix == 'quit()':
+                return repo_prefix
+            if not repo_count:
+                print(f'Repo prefix `{repo_prefix}` not found. Please try again.')
+            repo_prefix = input('Please input a repo prefix: ')
+            repo_prefix = repo_prefix if repo_prefix else prev_repo_prefix if bool_prompt(f'Use previous repo prefix: `{prev_repo_prefix}`?', True) else repo_prefix
+            repo_count = client.repo_prefix_exists(repo_prefix)
+        return repo_prefix
+    else:
+        repo_prefix = input('Repo Prefix: ')  # get assignment name (repo prefix)
+        while not repo_prefix:
+            repo_prefix = input('Please input a repo prefix: ')
+        prev_repo_prefix = repo_prefix
+        repo_count = client.repo_prefix_exists(repo_prefix)
+        while not repo_prefix or not repo_count:  # if input is empty ask again
+            if repo_prefix == 'quit()':
+                return repo_prefix
+            if not repo_count:
+                print(f'Repo prefix `{repo_prefix}` not found. Please try again.')
+            repo_prefix = input('Please input a repo prefix: ')
+            repo_prefix = repo_prefix if repo_prefix else prev_repo_prefix if bool_prompt(f'Use previous repo prefix: `{prev_repo_prefix}`?', True) else repo_prefix
+            repo_count = client.repo_prefix_exists(repo_prefix)
+        return repo_prefix
+
 
 
 def create_vscode_workspace(parent_folder_path, repo_prefix, repos: list[GitHubRepo]):
@@ -794,7 +811,8 @@ def main(preset=None, dry_run=None, config_manager=None):
         folder_suffix = preset.folder_suffix
         stop_2 = perf_counter()
 
-        repo_prefix = get_repo_prefix(client, config_manager.config.clone_history[-1].assignment_name)
+        prev_repo_prefix = '' if not config_manager.config.clone_history else config_manager.config.clone_history[-1].assignment_name
+        repo_prefix = get_repo_prefix(client, prev_repo_prefix)
         if repo_prefix == 'quit()':
             return
 
