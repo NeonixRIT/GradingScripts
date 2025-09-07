@@ -7,6 +7,7 @@ class ClonePreset:
         'csv_path',
         'append_timestamp',
         'clone_type',
+        'clone_source',
     ]
 
     def __init__(
@@ -17,6 +18,7 @@ class ClonePreset:
         csv_path,
         append_timestamp,
         clone_type: tuple[int, int, int],
+        clone_source
     ):
         self.name = name
         self.folder_suffix = folder_suffix
@@ -24,9 +26,10 @@ class ClonePreset:
         self.csv_path = csv_path
         self.append_timestamp = append_timestamp
         self.clone_type = clone_type
+        self.clone_source = clone_source
 
     def __repr__(self) -> str:
-        return f'ClonePreset(folder_suffix: {self.folder_suffix}, clone_time: {self.clone_time}, name: {self.name}, csv_path: {self.csv_path}, append_timestamp: {self.append_timestamp})'
+        return f'ClonePreset(folder_suffix: {self.folder_suffix}, clone_time: {self.clone_time}, name: {self.name}, csv_path: {self.csv_path}, append_timestamp: {self.append_timestamp}, clone_source: {self.clone_source})'
 
     def __eq__(self, other) -> bool:
         if not isinstance(other, ClonePreset):

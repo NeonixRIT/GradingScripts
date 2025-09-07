@@ -25,17 +25,18 @@ class MainMenu(Menu):
     def load(self):
         self.name = f'GCIS Grading Scripts {get_color_from_status(self.context.update_status)}v{self.__version}{WHITE}'
         try:
-            client = BareGitHubAPIClient()
-            authorized, resp_code = client.is_authorized(
-                self.context.config_manager.config.organization,
-                self.context.config_manager.config.token
-            )
-            if not authorized:
-                print(f'{LIGHT_RED}FATAL: GitHub API Authorization failed. Make sure your token is valid and has the correct permissions.\nResponse Code: {resp_code}{WHITE}')
-                raise ValueError(f'GitHub API Authorization failed. Make sure your token is valid and has the correct permissions.\nResponse Code: {resp_code}')
-            if resp_code != 200:
-                print(f'{LIGHT_RED}FATAL: GitHub API returned an unexpected response code. Perhaphs try again later.\nResponse Code: {resp_code}{WHITE}')
-                raise ValueError(f'GitHub API returned an unexpected response code. Perhaphs try again later.\nResponse Code: {resp_code}')
+            pass
+            # client = BareGitHubAPIClient()
+            # authorized, resp_code = client.is_authorized(
+            #     self.context.config_manager.config.organization,
+            #     self.context.config_manager.config.github_token
+            # )
+            # if not authorized:
+            #     print(f'{LIGHT_RED}FATAL: GitHub API Authorization failed. Make sure your token is valid and has the correct permissions.\nResponse Code: {resp_code}{WHITE}')
+            #     raise ValueError(f'GitHub API Authorization failed. Make sure your token is valid and has the correct permissions.\nResponse Code: {resp_code}')
+            # if resp_code != 200:
+            #     print(f'{LIGHT_RED}FATAL: GitHub API returned an unexpected response code. Perhaphs try again later.\nResponse Code: {resp_code}{WHITE}')
+            #     raise ValueError(f'GitHub API returned an unexpected response code. Perhaphs try again later.\nResponse Code: {resp_code}')
         except ConnectionError as e:
             print(f'{LIGHT_RED}FATAL: Unable to contact GitHub API.{WHITE}')
             raise e

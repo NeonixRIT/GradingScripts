@@ -7,7 +7,7 @@ from .event import Event
 from .enhanced_json_decoder import EnhancedJSONEncoder
 
 from pathlib import Path
-from threading import Thread
+from threading import Thread, Lock
 from types import SimpleNamespace
 from typing import Any, Iterable
 
@@ -28,6 +28,7 @@ class ConfigManager:
         'on_config_read',
         'on_config_verify',
         'depends_loaded',
+        'init_verify_thread',
     ]
 
     def __init__(self, config_path: str, config_entries: list[ConfigEntry] = None):
@@ -43,6 +44,8 @@ class ConfigManager:
 
         self.config = None
         self.custom_verify_methods = Event()
+
+        self.init_verify_thread = None
 
         self.path_entries = []
         self.censored_entries = []
@@ -98,11 +101,12 @@ class ConfigManager:
             Path(self.config_path).read_text(),
             object_hook=lambda d: SimpleNamespace(**d),
         )
+
         self.config = config
         if self.depends_loaded:
             self.verify_config()
         else:
-            Thread(target=self.__verify_on_depends_loaded).start()
+            self.init_verify_thread = Thread(target=self.__verify_on_depends_loaded)
 
     def save_config(self):
         self.verify_config()
@@ -158,7 +162,7 @@ class ConfigManager:
         missing_fields = set()
         for entry in self.config_entries:
             if getattr(self.config, entry.name, None) is None:
-                if entry.prompt and (entry.default_value is None or entry.is_bool_prompt):
+                if entry.prompt and (entry.default_value is None or entry.is_bool_prompt or entry.is_multichoice_prompt):
                     missing_fields.add(entry.name)
                 else:
                     setattr(self.config, entry.name, entry.default_value)
@@ -172,6 +176,11 @@ class ConfigManager:
             def prompt_func(bound_entry=entry):
                 if bound_entry.is_bool_prompt:
                     return self.bool_prompt(bound_entry.prompt_text, bound_entry.default_value)
+                elif bound_entry.is_multichoice_prompt and bound_entry.multichoice_options:
+                    default_index = bound_entry.default_value if isinstance(bound_entry.default_value, int) else 0
+                    if bound_entry.default_value in bound_entry.multichoice_options:
+                        default_index = bound_entry.multichoice_options.index(bound_entry.default_value)
+                    return self.multichoice_prompt(bound_entry.prompt_text, bound_entry.multichoice_options, default_index)
                 else:
                     return input(bound_entry.prompt_text)
 
@@ -186,6 +195,17 @@ class ConfigManager:
         n_str = 'N' if not default_output else 'n'
         result = input(f'{prompt} ({LIGHT_GREEN}{y_str}{WHITE}/{LIGHT_RED}{n_str}{WHITE}): ')
         return default_output if not result else True if result.lower() == 'y' else False if result.lower() == 'n' else default_output
+
+    def multichoice_prompt(self, prompt: str, options: list, default_index: int) -> Any:
+        options_str = '\n'.join([f'[{i + 1}] {LIGHT_GREEN}{opt}{WHITE}' if i == default_index else f'[{i + 1}] {opt}' for i, opt in enumerate(options)])
+        print(f'Choose one of the following options:\n{options_str}')
+        while True:
+            result = input(f'{prompt}')
+            if not result:
+                return options[default_index]
+            if result.isdigit() and (1 <= int(result) <= len(options)):
+                return options[int(result) - 1]
+            print(f'{LIGHT_RED}Invalid option. Please choose one of the options above.{WHITE}')
 
     def set_config_value(self, name: str, value: Any):
         setattr(self.config, name, value)

@@ -3,7 +3,7 @@ import shutil
 import os
 
 from .clone_preset import ClonePreset
-from .github_client import main
+from .source_api_client import main
 
 from utils import get_color_from_bool, async_run_cmd, list_to_multi_clone_presets, onerror
 from tuiframeworkpy import SubMenu, Event, MenuOption

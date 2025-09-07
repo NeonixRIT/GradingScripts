@@ -1,5 +1,5 @@
 from .student_param import StudentParam
-from .github_client import get_students
+from .source_api_client import get_students
 
 from tuiframeworkpy import (
     SubMenu,

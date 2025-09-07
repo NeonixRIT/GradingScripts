@@ -9,7 +9,7 @@ from tuiframeworkpy import (
     CYAN,
     WHITE,
 )
-from utils import bool_prompt, list_to_multi_clone_presets, check_time
+from utils import bool_prompt, multichoice_prompt, list_to_multi_clone_presets, check_time
 
 
 class PresetsMenu(SubMenu):
@@ -84,6 +84,9 @@ class PresetsMenu(SubMenu):
         elif res == 'ex':
             clone_type_flag = (0, 0, 1)
 
+        preset_clone_source = self.context.config_manager.config.default_clone_source
+        clone_source = multichoice_prompt(f'Is this preset for {LIGHT_GREEN}GitHub{WHITE} or {LIGHT_GREEN}GitLab{WHITE}? ', ['GitHub', 'GitLab'], 0 if preset_clone_source == 'GitHub' else 1)
+
         if not csv_path:
             csv_path = self.context.config_manager.config.students_csv
 
@@ -95,6 +98,7 @@ class PresetsMenu(SubMenu):
                 csv_path,
                 append_timestamp,
                 clone_type_flag,
+                clone_source
             ]
         )
         self.context.config_manager.save_config()

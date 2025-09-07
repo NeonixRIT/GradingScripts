@@ -15,7 +15,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from copy import deepcopy
 from datetime import date, datetime, timedelta, timezone
 from enum import Enum
-from urllib.parse import urlencode
+from urllib.parse import urlencode, quote
 
 from pprint import pformat
 from time import perf_counter
@@ -51,6 +51,18 @@ def bool_prompt(prompt: str, default_output: bool) -> bool:
     n_str = 'N' if not default_output else 'n'
     result = input(f'{prompt} ({LIGHT_GREEN}{y_str}{WHITE}/{LIGHT_RED}{n_str}{WHITE}): ')
     return default_output if not result else True if result.lower() == 'y' else False if result.lower() == 'n' else default_output
+
+
+def multichoice_prompt(prompt: str, options: list, default_index: int):
+    options_str = '\n'.join([f'[{i + 1}] {LIGHT_GREEN}{opt}{WHITE}' if i == default_index else f'[{i + 1}] {opt}' for i, opt in enumerate(options)])
+    print(f'Choose one of the following options:\n{options_str}')
+    while True:
+        result = input(f'{prompt}')
+        if not result:
+            return options[default_index]
+        if result.isdigit() and (1 <= int(result) <= len(options)):
+            return options[int(result) - 1]
+        print(f'{LIGHT_RED}Invalid option. Please choose one of the options above.{WHITE}')
 
 
 def get_page_by_rel(links: str, rel: str = 'last'):
@@ -247,62 +259,17 @@ class RepoStatus(Enum):
     COMMIT_NOT_FOUND = ( 7, 'Commit Not Found Before Due Datetime.'.ljust(STATUS_LJUST), MAGENTA, True)
 
 
-class GitHubAPIClient:
-    def __init__(self, auth_token: str, organization: str, log_handler: LogHandler) -> None:
-        self.__organization = organization
-        self.__auth_token = auth_token
-        self.headers = {
-            'Accept': 'application/vnd.github+json',
-            'Authorization': f'Bearer {self.__auth_token}',
-            'X-GitHub-Api-Version': '2022-11-28',
-        }
-        if not auth_token:
-            del self.headers['Authorization']
-
-        self.repo_params = {'q': f'org:{self.__organization} fork:true', 'per_page': 100}
-
-        self.push_params = {'activity_type': 'push,force_push', 'order': 'desc', 'per_page': 100, 'page': 1}
-        self.commit_params = {'per_page': 1, 'page': 1}
+class APIClient:
+    def __init__(self, access_token: str, organization: str, headers: dict, log_handler: LogHandler) -> None:
+        self.access_token = access_token
+        self.organization = organization
+        self.headers = headers
         self.log_handler = log_handler
         self.debug = self.log_handler.log_level == LogLevel.DEBUG
         self.session = None
 
-    def is_authorized(self) -> tuple:
-        """
-        Check if auth token is valid by querying organization endpoint
-        """
-        import niquests
-        import orjson as jsonbackend
-
-        org_url = f'https://api.github.com/orgs/{self.__organization}'
-        try:
-            response = niquests.get(org_url, headers=self.headers, timeout=10)
-            org_auth = jsonbackend.loads(response.content).get('total_private_repos', False)
-            if not org_auth:
-                return False, response.status_code
-        except TimeoutError:
-            raise ConnectionError('Connection timed out.') from None
-        return True, response.status_code
-
-    def repo_prefix_exists(self, repo_prefix: str) -> tuple:
-        """
-        Check if assignment exists
-        """
-        import orjson as jsonbackend
-
-        if not repo_prefix:
-            return True, -1
-        params = dict(self.repo_params)
-        params['per_page'] = 1
-        params['q'] = f'{repo_prefix} ' + params['q']
-        url = 'https://api.github.com/search/repositories'
-        response = self.sync_request(url, params)
-        if response.status_code != 200:
-            return 0
-        repo_json = jsonbackend.loads(response.content)
-        if repo_json.get('total_count', 0) == 0:
-            return 0
-        return repo_json['total_count']
+        #self.prefix_exists_params
+        #self.push_params
 
     def sync_request(self, url: str, params: dict = None):
         import niquests
@@ -324,6 +291,154 @@ class GitHubAPIClient:
             self.log_handler.debug(pformat_objects(response), self)
             self.log_handler.debug('*' * 50, self)
         return response
+
+    def repo_prefix_exists(self, repo_prefix: str):
+        raise NotImplementedError()
+
+    def get_commit_before_by_repo(self, datetime: datetime, repo):
+        raise NotImplementedError()
+
+    def get_repo(self, repo: 'GitRepo') -> dict:
+        raise NotImplementedError()
+
+    def get_push_count(self, repo: 'GitRepo') -> dict:
+        raise NotImplementedError()
+
+    def close(self):
+        if self.session is not None:
+            self.session.close()
+            self.session = None
+        if self.log_handler is not None:
+            self.log_handler.close()
+            self.log_handler = None
+
+
+class GitRepo:
+    def __init__(self, api_client: APIClient, repo_info: dict = None, status: RepoStatus = RepoStatus.INIT, prefix: str = None, real_name: str = None, username: str = None, local_path: str = None, hours_adjust: int = 0) -> None:
+        self.repo_info = repo_info
+        self.prefix = prefix
+        self.real_name = real_name
+        self.username = username
+        self.local_path = local_path
+        self.status = status
+        self.out_name = f'{self.prefix}-{self.real_name}'
+        self.status = RepoStatus.INIT
+        self.api_client = api_client
+        self.hours_adjust = timedelta(hours=hours_adjust)
+
+    def __repr__(self):
+        return f'<GitRepo: {self.prefix}-{self.username}, status={self.status}, hours_adjust={self.hours_adjust}, repo_info={self.repo_info}>'
+
+    def get_info(self):
+        self.status = RepoStatus.RETRIEVING
+        response_status_code, self.repo_info = self.api_client.get_repo(self.get_name())
+        if response_status_code == 200:
+            self.status = RepoStatus.RETRIEVED
+        elif response_status_code == 404:
+            self.status = RepoStatus.NOT_FOUND
+        else:
+            self.status = RepoStatus.RETRIEVE_ERROR
+        return self
+
+    def get_commit_before(self, datetime: datetime):
+        return self.api_client.get_commit_before_by_repo(datetime + self.hours_adjust, self)
+
+    def clone(self, out_dir: Path | str, depth: int = None, single_branch: bool = True, use_cloned_done: bool = False, dry_run: bool = False):
+        self.status = RepoStatus.CLONING
+        clone_url = self.get_clone_url()
+        cmd = ['git', 'clone']
+        if single_branch:
+            cmd.append('--single-branch')
+        if depth is not None:
+            cmd.extend(['--depth', str(depth)])
+        cmd.extend([clone_url, self.out_name])
+        self.local_path = Path(out_dir) / self.out_name
+        stdout, stderr, exitcode = None, None, 0
+        if not dry_run:
+            stdout, stderr, exitcode = run_cmd(cmd, cwd=out_dir)
+        if exitcode == 0:
+            self.status = RepoStatus.CLONED if not use_cloned_done else RepoStatus.CLONED_DONE
+        else:
+            self.status = RepoStatus.CLONE_ERROR
+        return stdout, stderr, exitcode
+
+    def reset(self, commit_hash: str, dry_run: bool = False):
+        self.status = RepoStatus.RESETTING
+        cmd = ['git', 'reset', '--hard', '-q', commit_hash]
+        stdout, stderr, exitcode = None, None, 0
+        if not dry_run:
+            stdout, stderr, exitcode = run_cmd(cmd, cwd=self.local_path)
+        if exitcode == 0:
+            self.status = RepoStatus.RESET
+        else:
+            self.status = RepoStatus.RESET_ERROR
+        return stdout, stderr, exitcode
+
+    def clone_and_reset(self, commit_hash, out_dir: Path | str, depth: int = None, single_branch: bool = True, dry_run: bool = False):
+        clone_stdout, clone_stderr, clone_exitcode = self.clone(out_dir, depth, single_branch, dry_run=dry_run)
+        if clone_exitcode != 0:
+            return (clone_stdout, clone_stderr, clone_exitcode), (None, None, None)
+        reset_stdout, reset_stderr, reset_exitcode = self.reset(commit_hash, dry_run=dry_run)
+        return (clone_stdout, clone_stderr, clone_exitcode), (reset_stdout, reset_stderr, reset_exitcode)
+
+    def get_name(self):
+        raise NotImplementedError()
+
+    def get_clone_url(self):
+        raise NotImplementedError()
+
+
+class GitHubRepo(GitRepo):
+    def get_name(self):
+        return f'{self.prefix}-{self.username}'
+
+    def get_clone_url(self):
+        return self.repo_info.get('clone_url', None).replace('https://', f'https://{self.api_client.access_token}@')
+
+
+class GitLabRepo(GitRepo):
+    def get_name(self):
+        return f'{self.real_name.replace("-", "_")}/{self.prefix}'
+
+    def get_clone_url(self):
+        return self.repo_info.get('ssh_url_to_repo', None)
+
+
+class GitHubAPIClient(APIClient):
+    def __init__(self, access_token: str, organization: str, log_handler: LogHandler) -> None:
+        headers = {
+            'Accept': 'application/vnd.github+json',
+            'Authorization': f'Bearer {access_token}',
+            'X-GitHub-Api-Version': '2022-11-28',
+        }
+        if not access_token:
+            del headers['Authorization']
+
+        self.repo_params = {'q': f'org:{organization} fork:true', 'per_page': 100}
+
+        self.push_params = {'activity_type': 'push,force_push', 'order': 'desc', 'per_page': 100, 'page': 1}
+        self.commit_params = {'per_page': 1, 'page': 1}
+        super().__init__(access_token, organization, headers, log_handler)
+
+    def repo_prefix_exists(self, repo_prefix: str) -> tuple:
+        """
+        Check if assignment exists
+        """
+        import orjson as jsonbackend
+
+        if not repo_prefix:
+            return True, -1
+        params = dict(self.repo_params)
+        params['per_page'] = 1
+        params['q'] = f'{repo_prefix} ' + params['q']
+        url = 'https://api.github.com/search/repositories'
+        response = self.sync_request(url, params)
+        if response.status_code != 200:
+            return 0
+        repo_json = jsonbackend.loads(response.content)
+        if repo_json.get('total_count', 0) == 0:
+            return 0
+        return repo_json['total_count']
 
     def get_page_by_number(self, base_url: str, params: dict, page: int):
         params = dict(params)
@@ -388,7 +503,7 @@ class GitHubAPIClient:
         num_pushes = len(pushes)
         if num_pushes == 0:
             repo.status = RepoStatus.NO_COMMITS
-        return len(pushes)
+        return num_pushes
 
     def get_commit_before_by_repo(self, datetime: datetime, repo: 'GitHubRepo') -> tuple[str, int]:
         # TODO: Support github classroom team repos, owned by the org, check "teams_url", and then "members_url" in repo json to get students in team
@@ -420,7 +535,7 @@ class GitHubAPIClient:
     def get_repo(self, repo_name: str) -> dict:
         import orjson as jsonbackend
 
-        response = self.sync_request(f'https://api.github.com/repos/{self.__organization}/{repo_name}')
+        response = self.sync_request(f'https://api.github.com/repos/{self.organization}/{repo_name}')
         return response.status_code, jsonbackend.loads(response.content)
 
     def search_repos(self, repo_prefix: str):
@@ -441,96 +556,108 @@ class GitHubAPIClient:
     def get_repo_of_users(self, repo_prefix: str, usernames: list | dict):
         import orjson as jsonbackend
 
-        base_url = f'https://api.github.com/repos/{self.__organization}/'
+        base_url = f'https://api.github.com/repos/{self.organization}/'
         with ThreadPoolExecutor(max_workers=(os.cpu_count() * 1.25) if not self.debug else 1) as executor:
             futures = {executor.submit(self.sync_request, f'{base_url}{repo_prefix}-{username}', {}): username for username in usernames}
             for future in as_completed(futures):
                 response = future.result()
                 yield response.status_code, jsonbackend.loads(response.content)
 
-    def close(self):
-        if self.session is not None:
-            self.session.close()
-            self.session = None
-        if self.log_handler is not None:
-            self.log_handler.close()
-            self.log_handler = None
 
+class GitLabAPIClient(APIClient):
+    def __init__(self, access_token: str, organization: str, log_handler: LogHandler) -> None:
+        headers = {
+            'Accept': 'application/json',
+            'Authorization': f'Bearer {access_token}'
+        }
+        if not access_token:
+            del headers['Authorization']
 
-class GitHubRepo:
-    def __init__(self, api_client: GitHubAPIClient, repo_info: dict = None, status: RepoStatus = RepoStatus.INIT, prefix: str = None, real_name: str = None, username: str = None, local_path: str = None, hours_adjust: int = 0) -> None:
-        self.repo_info = repo_info
-        self.prefix = prefix
-        self.real_name = real_name
-        self.username = username
-        self.local_path = local_path
-        self.status = status
-        self.out_name = f'{self.prefix}-{self.real_name}'
-        self.status = RepoStatus.INIT
-        self.api_client = api_client
-        self.hours_adjust = timedelta(hours=hours_adjust)
+        self.prefix_exists_params = {'scope': 'projects'}
+        self.push_params = {'action': 'pushed', 'per_page': 1}
 
-    def __repr__(self):
-        return f'<GitHubRepo: {self.prefix}-{self.username}, status={self.status}, hours_adjust={self.hours_adjust}, repo_info={self.repo_info}>'
+        super().__init__(access_token, organization, headers, log_handler)
 
-    def get_info(self):
-        self.status = RepoStatus.RETRIEVING
-        response_status_code, self.repo_info = self.api_client.get_repo(f'{self.prefix}-{self.username}')
-        if response_status_code == 200:
-            self.status = RepoStatus.RETRIEVED
-        elif response_status_code == 404:
-            self.status = RepoStatus.NOT_FOUND
-        else:
-            self.status = RepoStatus.RETRIEVE_ERROR
-        return self
+    def repo_prefix_exists(self, repo_prefix: str):
+        """
+        Check if assignment exists
+        """
+        import orjson as jsonbackend
 
-    def get_commit_before(self, datetime: datetime):
-        return self.api_client.get_commit_before_by_repo(datetime + self.hours_adjust, self)
+        if not repo_prefix:
+            return True, -1
+        params = dict(self.prefix_exists_params)
+        params['search'] = f'starter_code/{repo_prefix}'
+        url = f'https://git.gccis.rit.edu/api/v4/groups/{quote(self.organization)}/search'
+        response = self.sync_request(url, params)
+        if response.status_code != 200:
+            return 0
+        repo_json = jsonbackend.loads(response.content)
+        return len(repo_json)
 
-    def clone(self, auth_token, out_dir: Path | str, depth: int = None, single_branch: bool = True, use_cloned_done: bool = False, dry_run: bool = False):
-        self.status = RepoStatus.CLONING
-        clone_url = self.repo_info['clone_url'].replace('https://', f'https://{auth_token}@')
-        cmd = ['git', 'clone']
-        if single_branch:
-            cmd.append('--single-branch')
-        if depth is not None:
-            cmd.extend(['--depth', str(depth)])
-        cmd.extend([clone_url, self.out_name])
-        self.local_path = Path(out_dir) / self.out_name
-        stdout, stderr, exitcode = None, None, 0
-        if not dry_run:
-            stdout, stderr, exitcode = run_cmd(cmd, cwd=out_dir)
-        if exitcode == 0:
-            self.status = RepoStatus.CLONED if not use_cloned_done else RepoStatus.CLONED_DONE
-        else:
-            self.status = RepoStatus.CLONE_ERROR
-        return stdout, stderr, exitcode
+    def get_push_count(self, datetime: datetime, repo: 'GitLabRepo'):
+        try:
+            if repo.status != RepoStatus.RETRIEVED:
+                return None
+            repo.status = RepoStatus.CHECKING_COMMITS
+            params = dict(self.push_params)
 
-    def reset(self, commit_hash: str, dry_run: bool = False):
-        self.status = RepoStatus.RESETTING
-        cmd = ['git', 'reset', '--hard', '-q', commit_hash]
-        stdout, stderr, exitcode = None, None, 0
-        if not dry_run:
-            stdout, stderr, exitcode = run_cmd(cmd, cwd=self.local_path)
-        if exitcode == 0:
-            self.status = RepoStatus.RESET
-        else:
-            self.status = RepoStatus.RESET_ERROR
-        return stdout, stderr, exitcode
+            import orjson as jsonbackend
 
-    def clone_and_reset(self, auth_token, commit_hash, out_dir: Path | str, depth: int = None, single_branch: bool = True, dry_run: bool = False):
-        clone_stdout, clone_stderr, clone_exitcode = self.clone(auth_token, out_dir, depth, single_branch, dry_run=dry_run)
-        if clone_exitcode != 0:
-            return (clone_stdout, clone_stderr, clone_exitcode), (None, None, None)
-        reset_stdout, reset_stderr, reset_exitcode = self.reset(commit_hash, dry_run=dry_run)
-        return (clone_stdout, clone_stderr, clone_exitcode), (reset_stdout, reset_stderr, reset_exitcode)
+            repo_id = repo.repo_info.get('id', None)
+            url = f'https://git.gccis.rit.edu/api/v4/projects/{repo_id}/events'
+            response = self.sync_request(url, params)
+            if response.status_code != 200:
+                repo.status = RepoStatus.ACTIVITY_ERROR
+                return -1
+            num_pushes = len(jsonbackend.loads(response.content))
+            if num_pushes == 0:
+                repo.status = RepoStatus.NO_COMMITS
+            return num_pushes
+        except Exception as _:
+            repo.status = RepoStatus.ACTIVITY_ERROR
 
-    def find_duplicates(self):
-        repo_infos = self.api_client.search_repos(self.repo_info['name'])
-        for repo_info in repo_infos:
-            if repo_info['name'] == self.repo_info['name']:
-                continue
-            yield GitHubRepo(self.api_client, repo_info, self.status, self.prefix, self.real_name, self.username, self.local_path, self.hours_adjust)
+    def get_commit_before_by_repo(self, datetime: datetime, repo: 'GitLabRepo'):
+        try:
+            if repo.status != RepoStatus.RETRIEVED:
+                return None
+            repo.status = RepoStatus.CHECKING_COMMITS
+            params = dict(self.push_params)
+
+            repo_id = repo.repo_info.get('id', None)
+            url = f'https://git.gccis.rit.edu/api/v4/projects/{repo_id}/events'
+            response = self.sync_request(url, params)
+            if response.status_code != 200:
+                repo.status = RepoStatus.ACTIVITY_ERROR
+                return -1
+            has_pushes = len(response.json()) > 0
+            if not has_pushes:
+                repo.status = RepoStatus.NO_COMMITS
+                return None
+
+            params['before'] = datetime.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
+            response = self.sync_request(url, params)
+            if response.status_code != 200:
+                repo.status = RepoStatus.ACTIVITY_ERROR
+                return -1
+
+            pushes = response.json()
+            if not pushes:
+                repo.status = RepoStatus.COMMIT_NOT_FOUND
+                return None
+
+            commit_hash = pushes[0]['push_data']['commit_to']
+            repo.status = RepoStatus.COMMIT_FOUND
+            return commit_hash
+        except Exception as _:
+            repo.status = RepoStatus.ACTIVITY_ERROR
+
+    def get_repo(self, repo_name: str) -> dict:
+        import orjson as jsonbackend
+
+        full_repo_path = f'{self.organization}/students/{repo_name}'
+        response = self.sync_request(f'https://git.gccis.rit.edu/api/v4/projects/{quote(full_repo_path, safe="")}')
+        return response.status_code, jsonbackend.loads(response.content)
 
 
 def repo_status_print_loop(repos: list[GitHubRepo], max_name_len: int, max_user_len: int):
@@ -604,6 +731,8 @@ def get_repo_prefix(client: GitHubAPIClient, prev_repo_prefix: str) -> str:
     """
     Get assignment name from input.
     If input is empty, prompt to use previous value.
+
+    TODO: CLEAN!!!!!
     """
     if prev_repo_prefix:
         repo_prefix = input('Repo Prefix (`enter` for previous value): ')  # get assignment name (repo prefix)
@@ -634,7 +763,6 @@ def get_repo_prefix(client: GitHubAPIClient, prev_repo_prefix: str) -> str:
             repo_prefix = repo_prefix if repo_prefix else prev_repo_prefix if bool_prompt(f'Use previous repo prefix: `{prev_repo_prefix}`?', True) else repo_prefix
             repo_count = client.repo_prefix_exists(repo_prefix)
         return repo_prefix
-
 
 
 def create_vscode_workspace(parent_folder_path, repo_prefix, repos: list[GitHubRepo]):
@@ -748,11 +876,11 @@ def print_positional_line(text: str, y: int):
     print(f'{start_of_prev_line * y}{text}{start_of_next_line * y}', end='')
 
 
-def build_repo_and_info_str(repo: GitHubRepo, info: str, max_name_len: int, max_user_len: int, color: str = WHITE) -> str:
+def build_repo_and_info_str(repo: GitRepo, info: str, max_name_len: int, max_user_len: int, color: str = WHITE) -> str:
     return f'{color}{repo.real_name.ljust(max_name_len)} : {repo.username.ljust(max_user_len)} : {info}{WHITE}'
 
 
-def get_repos_info(repos: list[GitHubRepo], debug: bool = False):
+def get_repos_info(repos: list[GitRepo], debug: bool = False):
     with ThreadPoolExecutor(max_workers=(os.cpu_count() * 1.25) if not debug else 1) as executor:
         futures = [executor.submit(repo.get_info) for repo in repos]
         for future in as_completed(futures):
@@ -772,14 +900,6 @@ def save_report(report, config_manager):
     config_manager.set_config_value('clone_history', clone_logs)
 
 
-# def handle_duplicates(dup_futures, dry_run, current_pull, debug):
-#     '''
-#     similar to main function but has its own print loop and repos list
-#     '''
-#     with ThreadPoolExecutor(max_workers=(os.cpu_count() * 1.25) if not debug else 1) as executor:
-#         pass
-
-
 def main(preset=None, dry_run=None, config_manager=None):
     gc.disable()
 
@@ -787,21 +907,21 @@ def main(preset=None, dry_run=None, config_manager=None):
     prints_log = []
     repos_created = False
     students_path = config_manager.config.students_csv
-    access_token = config_manager.config.token
-    organization = config_manager.config.organization
-    debug = config_manager.config.debug
-    delete_duplicates = config_manager.config.replace_clone_duplicates
-
-    log_handler = LogHandler(LogLevel.DEBUG if debug else LogLevel.CRITICAL)
-    log_handler.censored_strs.append(access_token)
-    client = GitHubAPIClient(access_token, organization, log_handler)
+    default_clone_source = config_manager.config.default_clone_source
     stop_1 = perf_counter()
     try:
         if preset is None:
-            preset = ClonePreset('', '', '', students_path, False, (0, 0, 0))
+            preset = ClonePreset('', '', '', students_path, False, (0, 0, 0), default_clone_source)
             preset.append_timestamp = bool_prompt(
                 'Append timestamp to repo folder name?',
                 not config_manager.config.replace_clone_duplicates,
+            )
+            github_src_str = f'{LIGHT_GREEN}GitHub{WHITE}' if default_clone_source == 'GitHub' else 'GitHub'
+            gitlab_src_str = f'{LIGHT_GREEN}GitLab{WHITE}' if default_clone_source == 'GitLab' else 'GitLab'
+            preset.clone_source = multichoice_prompt(
+                'Choose a clone source (enter for default):',
+                [github_src_str, gitlab_src_str],
+                0 if default_clone_source == 'GitHub' else 1,
             )
         else:
             students_path = preset.csv_path
@@ -810,6 +930,30 @@ def main(preset=None, dry_run=None, config_manager=None):
         append_timestamp = preset.append_timestamp
         folder_suffix = preset.folder_suffix
         stop_2 = perf_counter()
+
+        clone_source = preset.clone_source if preset.clone_source else default_clone_source
+        if clone_source not in ['GitHub', 'GitLab']:
+            print(f'{LIGHT_RED}Invalid clone source. Please choose either GitHub or GitLab.{WHITE}')
+            return
+
+        if clone_source == 'GitHub' and (not config_manager.config.github_token or not config_manager.config.github_organization):
+            print(f'{LIGHT_RED}GitHub token or organization not set in config. Please set them and try again.{WHITE}')
+            return
+
+        if clone_source == 'GitLab' and (not config_manager.config.gitlab_token or not config_manager.config.gitlab_organization):
+            print(f'{LIGHT_RED}GitLab token or organization not set in config. Please set them and try again.{WHITE}')
+            return
+
+        client_type = GitHubAPIClient if clone_source == "GitHub" else GitLabAPIClient
+        repo_type = GitHubRepo if clone_source == "GitHub" else GitLabRepo
+        access_token = config_manager.config.github_token if clone_source == "GitHub" else config_manager.config.gitlab_token
+        organization = config_manager.config.github_organization if clone_source == "GitHub" else config_manager.config.gitlab_organization
+        debug = config_manager.config.debug
+        delete_duplicates = config_manager.config.replace_clone_duplicates
+
+        log_handler = LogHandler(LogLevel.DEBUG if debug else LogLevel.CRITICAL)
+        log_handler.censored_strs.append(access_token)
+        client = client_type(access_token, organization, log_handler)
 
         prev_repo_prefix = '' if not config_manager.config.clone_history else config_manager.config.clone_history[-1].assignment_name
         repo_prefix = get_repo_prefix(client, prev_repo_prefix)
@@ -925,7 +1069,7 @@ def main(preset=None, dry_run=None, config_manager=None):
         num_reset = 0
         skip_flag = True
         pull_start = perf_counter()
-        repos = [GitHubRepo(client, prefix=repo_prefix, username=student_github, real_name=students[student_github]) for student_github in students]
+        repos = [repo_type(client, prefix=repo_prefix, username=student_username, real_name=students[student_username]) for student_username in students]
         repos_created = True
         for repo in repos:
             if repo.username in students_adjust:
@@ -943,7 +1087,6 @@ def main(preset=None, dry_run=None, config_manager=None):
             else:
                 get_futures = {executor.submit(client.get_commit_before_by_repo, due_datetime, repo): repo for repo in get_repos_info(repos)}
             clone_futures = {}
-            # check_dups_futures = {}
             for future in as_completed(get_futures):
                 due_commit = future.result()
                 repo: GitHubRepo = get_futures[future]
@@ -962,10 +1105,10 @@ def main(preset=None, dry_run=None, config_manager=None):
                     continue
                 if not current_pull:
                     skip_flag = False
-                    clone_futures[executor.submit(repo.clone_and_reset, access_token, due_commit, out_dir, dry_run=dry_run)] = repo
+                    clone_futures[executor.submit(repo.clone_and_reset, due_commit, out_dir, dry_run=dry_run)] = repo
                 else:
                     skip_flag = False
-                    clone_futures[executor.submit(repo.clone, access_token, out_dir, depth=1, use_cloned_done=True, dry_run=dry_run)] = repo
+                    clone_futures[executor.submit(repo.clone, out_dir, depth=1, use_cloned_done=True, dry_run=dry_run)] = repo
 
             for future in as_completed(clone_futures):
                 clone_result, reset_result = None, None
@@ -981,9 +1124,6 @@ def main(preset=None, dry_run=None, config_manager=None):
                 if reset_result is not None and reset_result[2] == 0:
                     num_reset += 1
 
-            # for future in as_completed(check_dups_futures):
-            #     for dup_repo in future.result():
-            #         print(f'{LIGHT_RED}Duplicate found: {dup_repo.out_name}{WHITE}')
         if not debug:
             p_thread.join()
             log_handler.info('Repo status print thread done.')

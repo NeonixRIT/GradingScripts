@@ -23,33 +23,48 @@ from view import (
     StudentParamsMenu,
 )
 
-VERSION = '2.6.1'
+VERSION = '2.7.0'
 
 
-def verify_token_org(config) -> set:
-    invalid_fields = set()
-    try:
-        tmp_client = BareGitHubAPIClient()
-        authorized, resp_code = tmp_client.is_authorized(config.organization, config.token)
-        if resp_code == 200 and authorized:
-            return invalid_fields
-        elif resp_code == 401:
-            invalid_fields.add('token')
-        elif resp_code == 404:
-            invalid_fields.add('organization')
-    except ConnectionError as e:
-        print(f'{LIGHT_RED}FATAL: Unable to contact GitHub API.{WHITE}')
-        raise e
-    return invalid_fields
+# def verify_token_org(config) -> set:
+#     invalid_fields = set()
+#     try:
+#         tmp_client = BareGitHubAPIClient()
+#         authorized, resp_code = tmp_client.is_authorized(config.organization, config.github_token)
+#         if resp_code == 200 and authorized:
+#             return invalid_fields
+#         elif resp_code == 401:
+#             invalid_fields.add('github_token')
+#         elif resp_code == 404:
+#             invalid_fields.add('organization')
+#     except ConnectionError as e:
+#         print(f'{LIGHT_RED}FATAL: Unable to contact GitHub API.{WHITE}')
+#         raise e
+#     return invalid_fields
 
 
 def verify_presets(config) -> set:
     invalid_fields = set()
     for preset in config.presets:
-        if not isinstance(preset[-1], list) and len(preset) != 6:
+        if not isinstance(preset[-1], list) and len(preset) < 6:
             preset.append([0, 0, 0])
+        if not isinstance(preset[-1], str) and len(preset) < 7:
+            preset.append('GitHub')
     return invalid_fields
 
+def verify_github_token_org(config) -> set:
+    invalid_fields = set()
+    if (not config.github_token or not config.github_organization) and config.default_clone_source == 'GitHub':
+        print(f'{LIGHT_RED}WARNING: GitHub token and Org is required if using GitHub as default clone source.{WHITE}')
+        invalid_fields.add('github_token')
+    return invalid_fields
+
+def verify_gitlab_token_org(config) -> set:
+    invalid_fields = set()
+    if (not config.gitlab_token or not config.gitlab_organization) and config.default_clone_source == 'GitLab':
+        print(f'{LIGHT_RED}WARNING: GitLab token and Org is required if using GitLab as default clone source.{WHITE}')
+        invalid_fields.add('gitlab_token')
+    return invalid_fields
 
 def set_csv_values(context, entry, prompt_func):
     if len(os.listdir('./data/csvs/')) == 0:
@@ -107,15 +122,33 @@ def main():
     # fast_evenloop = Dependency('uvloop', '0.21.0', 'pip') if os.name != 'nt' else Dependency('winloop', '0.1.8', 'pip')
 
     # Define Config Entries
-    token_entry = ConfigEntry(
-        'token',
-        'Token',
+    default_clone_source = ConfigEntry(
+        'default_clone_source',
+        'Default Clone Source',
+        'GitHub',
+        'Default Clone Source (GitHub or GitLab): ',
+        prompt=True,
+        is_multichoice_prompt=True,
+        multichoice_options=['GitHub', 'GitLab'],
+    )
+    gitlab_token_entry = ConfigEntry(
+        'gitlab_token',
+        'GitLab Token',
         None,
-        'Github Authentication Token: ',
+        'GitLab Authentication Token (enter to skip): ',
         prompt=True,
         censor=True,
     )
-    org_entry = ConfigEntry('organization', 'Organization', None, 'Organization Name: ', prompt=True)
+    github_token_entry = ConfigEntry(
+        'github_token',
+        'GitHub Token',
+        None,
+        'GitHub Authentication Token (enter to skip): ',
+        prompt=True,
+        censor=True,
+    )
+    github_org_entry = ConfigEntry('github_organization', 'GitHub Organization', None, 'GitHub Organization Name (enter to skip): ', prompt=True)
+    gitlab_org_entry = ConfigEntry('gitlab_organization', 'GitLab Organization', None, 'GitLab Organization Name (enter to skip): ', prompt=True)
     students_csv = ConfigEntry(
         'students_csv',
         'Students CSV Path',
@@ -144,8 +177,11 @@ def main():
     clone_history = ConfigEntry('clone_history', 'Clone History', [], None, prompt=False)
     student_params = ConfigEntry('extra_student_parameters', 'Extra Student Parameters', [], None, prompt=False)
     config_entries = [
-        token_entry,
-        org_entry,
+        default_clone_source,
+        gitlab_token_entry,
+        github_token_entry,
+        github_org_entry,
+        gitlab_org_entry,
         students_csv,
         out_dir_entry,
         replace_clone_duplicates,
@@ -161,7 +197,9 @@ def main():
     tui = TUI(VERSION, [git, orjson, niquests], 'data/config.json', config_entries, default_paths)
 
     # Register Custom Verify Methods
-    tui.context.config_manager += verify_token_org
+    # tui.context.config_manager += verify_token_org
+    tui.context.config_manager += verify_github_token_org
+    tui.context.config_manager += verify_gitlab_token_org
     tui.context.config_manager += verify_presets
 
     # Define Main Menu

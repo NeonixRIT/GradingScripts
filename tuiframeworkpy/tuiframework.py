@@ -78,6 +78,9 @@ class TUI:
             self.context.config_manager.depends_loaded = True
             if self.context.config_manager.config.debug:
                 input('Press enter to continue...')
+            if self.context.config_manager.init_verify_thread is not None:
+                self.context.config_manager.init_verify_thread.start()
+                self.context.config_manager.init_verify_thread.join()
             from versionmanagerpy import versionmanager, VersionManager
 
             vm = VersionManager('NeonixRIT', 'GradingScripts', self.version)

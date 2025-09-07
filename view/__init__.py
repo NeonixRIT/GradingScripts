@@ -6,4 +6,4 @@ from .config_menu import ConfigMenu
 from .select_csv_menu import SelectCSVMenu
 from .add_menu import AddMenu
 from .student_params_menu import StudentParamsMenu
-from .github_client import GitHubAPIClient
+from .source_api_client import GitHubAPIClient

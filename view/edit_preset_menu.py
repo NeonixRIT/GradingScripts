@@ -77,9 +77,21 @@ class EditPresetMenu(SubMenu):
         )
         self.local_options.append(edit_app_time)
 
+        change_source_event = Event()
+        change_source_event += lambda: self.edit_config_value(6)
+        change_source = MenuOption(
+            6,
+            f'Clone Source: {self.preset[6]}',
+            change_source_event,
+            Event(),
+            Event(),
+            False,
+        )
+        self.local_options.append(change_source)
+
         delete_preset_event = Event()
         delete_preset_event += self.delete_preset
-        delete_preset = MenuOption(6, 'Delete Preset', delete_preset_event, Event(), Event(), False)
+        delete_preset = MenuOption(7, 'Delete Preset', delete_preset_event, Event(), Event(), False)
         self.local_options.append(delete_preset)
 
         edit_name.on_exit += self.load
@@ -112,6 +124,8 @@ class EditPresetMenu(SubMenu):
                 option.text = f'Students CSV: {self.preset[i]}'
             elif option.text.startswith('Append Time'):
                 option.text = f'Append Time: {self.preset[i]}'
+            elif option.text.startswith('Clone Source'):
+                option.text = f'Clone Source: {self.preset[6]}'
         self.invalid_input_string = f'You entered an invalid option.\n\nPlease enter a number between {self.min_options} and {self.max_options}.\nPress enter to try again.'
 
     def run(self):
@@ -129,8 +143,10 @@ class EditPresetMenu(SubMenu):
         self.context.config_manager.read_config()
 
     def edit_config_value(self, value_index: int):
-        prompt = PROMPT_INDEX_TEXT[value_index]
-        if value_index == 4:
+        prompt = PROMPT_INDEX_TEXT[value_index] if value_index in PROMPT_INDEX_TEXT else 'Enter new value: '
+        if value_index == 6:
+            new_value = 'GitHub' if self.preset[6] == 'GitLab' else 'GitLab'
+        elif value_index == 4:
             new_value = bool_prompt(prompt, False)
         else:
             new_value = input(prompt)

@@ -41,6 +41,18 @@ def bool_prompt(prompt: str, default_output: bool) -> bool:
     return default_output if not result else True if result.lower() == 'y' else False if result.lower() == 'n' else default_output
 
 
+def multichoice_prompt(prompt: str, options: list, default_index: int):
+    options_str = '\n'.join([f'[{i + 1}] {LIGHT_GREEN}{opt}{WHITE}' if i == default_index else f'[{i + 1}] {opt}' for i, opt in enumerate(options)])
+    print(f'Choose one of the following options:\n{options_str}')
+    while True:
+        result = input(f'{prompt}')
+        if not result:
+            return options[default_index]
+        if result.isdigit() and (1 <= int(result) <= len(options)):
+            return options[int(result) - 1]
+        print(f'{LIGHT_RED}Invalid option. Please choose one of the options above.{WHITE}')
+
+
 def get_color_from_status(status) -> str:
     import versionmanagerpy
 
@@ -142,9 +154,9 @@ async def async_run_cmd(cmd: str | list, cwd=None) -> tuple[str | None, str | No
 
 
 def list_to_clone_preset(args: list) -> ClonePreset | None:
-    if len(args) != 6:
+    if len(args) != 7:
         return
-    return ClonePreset(args[0], args[1], args[2], args[3], args[4], args[5])
+    return ClonePreset(args[0], args[1], args[2], args[3], args[4], args[5], args[6])
 
 
 def list_to_multi_clone_presets(presets: list) -> list:
