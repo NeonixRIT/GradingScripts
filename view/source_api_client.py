@@ -595,7 +595,7 @@ class GitLabAPIClient(APIClient):
         repo_json = jsonbackend.loads(response.content)
         return len(repo_json)
 
-    def get_push_count(self, datetime: datetime, repo: 'GitLabRepo'):
+    def get_push_count(self, repo: 'GitLabRepo'):
         try:
             if repo.status != RepoStatus.RETRIEVED:
                 return None
@@ -902,6 +902,8 @@ def save_report(report, config_manager):
 
 def main(preset=None, dry_run=None, config_manager=None):
     gc.disable()
+    log_handler = None
+    client = None
 
     start_1 = perf_counter()
     prints_log = []
@@ -923,13 +925,13 @@ def main(preset=None, dry_run=None, config_manager=None):
                 [github_src_str, gitlab_src_str],
                 0 if default_clone_source == 'GitHub' else 1,
             )
+            preset.clone_source = 'GitHub' if preset.clone_source == github_src_str else 'GitLab'
         else:
             students_path = preset.csv_path
         start_2 = perf_counter()
         students = get_students(students_path)
         append_timestamp = preset.append_timestamp
         folder_suffix = preset.folder_suffix
-        stop_2 = perf_counter()
 
         clone_source = preset.clone_source if preset.clone_source else default_clone_source
         if clone_source not in ['GitHub', 'GitLab']:
@@ -948,12 +950,13 @@ def main(preset=None, dry_run=None, config_manager=None):
         repo_type = GitHubRepo if clone_source == "GitHub" else GitLabRepo
         access_token = config_manager.config.github_token if clone_source == "GitHub" else config_manager.config.gitlab_token
         organization = config_manager.config.github_organization if clone_source == "GitHub" else config_manager.config.gitlab_organization
-        debug = config_manager.config.debug
         delete_duplicates = config_manager.config.replace_clone_duplicates
 
+        debug = config_manager.config.debug
         log_handler = LogHandler(LogLevel.DEBUG if debug else LogLevel.CRITICAL)
         log_handler.censored_strs.append(access_token)
         client = client_type(access_token, organization, log_handler)
+        stop_2 = perf_counter()
 
         prev_repo_prefix = '' if not config_manager.config.clone_history else config_manager.config.clone_history[-1].assignment_name
         repo_prefix = get_repo_prefix(client, prev_repo_prefix)
