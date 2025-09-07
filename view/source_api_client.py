@@ -331,7 +331,7 @@ class GitRepo:
 
     def get_info(self):
         self.status = RepoStatus.RETRIEVING
-        response_status_code, self.repo_info = self.api_client.get_repo(self.get_name())
+        response_status_code, self.repo_info = self.api_client.get_repo(self)
         if response_status_code == 200:
             self.status = RepoStatus.RETRIEVED
         elif response_status_code == 404:
@@ -532,10 +532,10 @@ class GitHubAPIClient(APIClient):
         except Exception as _:
             repo.status = RepoStatus.ACTIVITY_ERROR
 
-    def get_repo(self, repo_name: str) -> dict:
+    def get_repo(self, repo: GitRepo) -> dict:
         import orjson as jsonbackend
 
-        response = self.sync_request(f'https://api.github.com/repos/{self.organization}/{repo_name}')
+        response = self.sync_request(f'https://api.github.com/repos/{self.organization}/{repo.prefix}-{repo.username}')
         return response.status_code, jsonbackend.loads(response.content)
 
     def search_repos(self, repo_prefix: str):
@@ -652,12 +652,23 @@ class GitLabAPIClient(APIClient):
         except Exception as _:
             repo.status = RepoStatus.ACTIVITY_ERROR
 
-    def get_repo(self, repo_name: str) -> dict:
+    def get_repo(self, repo: GitRepo) -> dict:
         import orjson as jsonbackend
+        # repo.prefix
+        student_group_name = repo.real_name.replace("-", "_")
+        search_term = repo.prefix
+        search_group = f'{self.organization}/students/{student_group_name}'
+        #url = f'https://git.gccis.rit.edu/api/v4/groups/{quote("test_class/students/Audi_Grader", safe="")}/search'
 
-        full_repo_path = f'{self.organization}/students/{repo_name}'
-        response = self.sync_request(f'https://git.gccis.rit.edu/api/v4/projects/{quote(full_repo_path, safe="")}')
-        return response.status_code, jsonbackend.loads(response.content)
+        # response = self.sync_request(f'https://git.gccis.rit.edu/api/v4/projects/{quote(full_repo_path, safe="")}')
+        response = self.sync_request(f'https://git.gccis.rit.edu/api/v4/groups/{quote(search_group, safe="")}/search', {'scope': 'projects', 'search': search_term})
+        data = jsonbackend.loads(response.content)
+        if isinstance(data, list) and len(data) > 0:
+            return response.status_code, data[0]
+        if not isinstance(data, list):
+            self.log_handler.error(f'Unexpected data returned from GitLab API when searching for repo `{search_term}` in group `{search_group}`: {pformat_objects(data)}', self)
+            return response.status_code, data
+        return 404, data
 
 
 def repo_status_print_loop(repos: list[GitHubRepo], max_name_len: int, max_user_len: int):
@@ -1134,6 +1145,7 @@ def main(preset=None, dry_run=None, config_manager=None):
         ellapsed_time = (pull_stop - pull_start) + (stop_1 - start_1) + (stop_2 - start_2) + (stop_3 - start_3)
 
         clear()
+        print(f'Clone Source: `{clone_source}`')
         print(f'Repo Prefix: `{repo_prefix}`')
         print(f'Due Date: `{due_date}`')
         print(f'Due Time: `{due_time}`')
