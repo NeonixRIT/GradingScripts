@@ -1048,7 +1048,7 @@ def main(preset=None, dry_run=None, config_manager=None):
             log_handler.info(f'Assignment Name: {repo_prefix}')
             log_handler.info(f'Due Date: {due_date}')
             log_handler.info(f'Due Time: {due_time}')
-            log_handler.info(f'Adjusted Due Datetime: {due_datetime}')
+            log_handler.info(f'Adjusted Due Datetime: {due_datetime} UTC')
 
         if append_timestamp:
             date_str = due_date[4:].replace('-', '_')
@@ -1148,16 +1148,17 @@ def main(preset=None, dry_run=None, config_manager=None):
         ellapsed_time = (pull_stop - pull_start) + (stop_1 - start_1) + (stop_2 - start_2) + (stop_3 - start_3)
 
         clear()
-        print(f'Clone Source: `{clone_source}`')
-        print(f'Repo Prefix: `{repo_prefix}`')
-        print(f'Due Date: `{due_date}`')
-        print(f'Due Time: `{due_time}`')
-        print(f'Adjusted Due Datetime: `{due_datetime}`')
-        print(f'Current Pull: `{current_pull}`')
-        print(f'Dry Run: `{dry_run}`')
-        print(f'Append Timestamp: `{append_timestamp}`')
-        print(f'Folder Suffix: `{folder_suffix}`')
-        print(f'Output directory: `{out_dir}`')
+        print('Clone Source:'.ljust(23), f'`{clone_source}`')
+        print('Repo Prefix:'.ljust(23), f'`{repo_prefix}`')
+        print('Due Date:'.ljust(23), f'`{due_date}`')
+        print('Due Time:'.ljust(23), f'`{due_time}`')
+        print('Adj. Date/Time (UTC):'.ljust(23), f'`{due_datetime} UTC`')
+        print('Adj. Date/Time (Local):'.ljust(23), f'`{due_datetime + timedelta(hours=UTC_OFFSET)} {CURRENT_TIMEZONE}`')
+        print('Current Pull:'.ljust(23), f'`{current_pull}`')
+        print('Dry Run:'.ljust(23), f'`{dry_run}`')
+        print('Append Timestamp:'.ljust(23), f'`{append_timestamp}`')
+        print('Folder Suffix:'.ljust(23), f'`{folder_suffix}`')
+        print('Output directory:'.ljust(23), f'`{out_dir}`')
 
         for repo in repos:
             repo_final_output = f'  > {build_repo_and_info_str(repo, repo.status.value[1], max_name_len, max_user_len, color=repo.status.value[2])}'
