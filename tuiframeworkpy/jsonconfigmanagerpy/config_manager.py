@@ -184,6 +184,7 @@ class ConfigManager:
                 else:
                     return input(bound_entry.prompt_text)
 
+            print(f'Current value for `{field}`: {getattr(self.config, field, "")}')
             new_value = prompt_func()
             setattr(self.config, field, new_value)
 
