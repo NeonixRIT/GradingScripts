@@ -405,7 +405,9 @@ class GitLabRepo(GitRepo):
 
 
 class GitHubAPIClient(APIClient):
-    def __init__(self, access_token: str, organization: str, log_handler: LogHandler) -> None:
+    def __init__(self, config, log_handler: LogHandler) -> None:
+        access_token = config.github_token
+        organization = config.github_organization
         headers = {
             'Accept': 'application/vnd.github+json',
             'Authorization': f'Bearer {access_token}',
@@ -565,7 +567,10 @@ class GitHubAPIClient(APIClient):
 
 
 class GitLabAPIClient(APIClient):
-    def __init__(self, access_token: str, organization: str, log_handler: LogHandler) -> None:
+    def __init__(self, config, log_handler: LogHandler) -> None:
+        access_token = config.gitlab_token
+        organization = config.gitlab_organization
+        self.server_url = config.gitlab_server
         headers = {
             'Accept': 'application/json',
             'Authorization': f'Bearer {access_token}'
@@ -588,7 +593,7 @@ class GitLabAPIClient(APIClient):
             return True, -1
         params = dict(self.prefix_exists_params)
         params['search'] = f'starter_code/{repo_prefix}'
-        url = f'https://git.gccis.rit.edu/api/v4/groups/{quote(self.organization)}/search'
+        url = f'{self.server_url}/api/v4/groups/{quote(self.organization)}/search'
         response = self.sync_request(url, params)
         if response.status_code != 200:
             return 0
@@ -605,7 +610,7 @@ class GitLabAPIClient(APIClient):
             import orjson as jsonbackend
 
             repo_id = repo.repo_info.get('id', None)
-            url = f'https://git.gccis.rit.edu/api/v4/projects/{repo_id}/events'
+            url = f'{self.server_url}/api/v4/projects/{repo_id}/events'
             response = self.sync_request(url, params)
             if response.status_code != 200:
                 repo.status = RepoStatus.ACTIVITY_ERROR
@@ -625,7 +630,7 @@ class GitLabAPIClient(APIClient):
             params = dict(self.push_params)
 
             repo_id = repo.repo_info.get('id', None)
-            url = f'https://git.gccis.rit.edu/api/v4/projects/{repo_id}/events'
+            url = f'{self.server_url}/api/v4/projects/{repo_id}/events'
             response = self.sync_request(url, params)
             if response.status_code != 200:
                 repo.status = RepoStatus.ACTIVITY_ERROR
@@ -658,10 +663,8 @@ class GitLabAPIClient(APIClient):
         student_group_name = repo.real_name.replace("-", "_")
         search_term = repo.prefix
         search_group = f'{self.organization}/students/{student_group_name}'
-        #url = f'https://git.gccis.rit.edu/api/v4/groups/{quote("test_class/students/Audi_Grader", safe="")}/search'
 
-        # response = self.sync_request(f'https://git.gccis.rit.edu/api/v4/projects/{quote(full_repo_path, safe="")}')
-        response = self.sync_request(f'https://git.gccis.rit.edu/api/v4/groups/{quote(search_group, safe="")}/search', {'scope': 'projects', 'search': search_term})
+        response = self.sync_request(f'{self.server_url}/api/v4/groups/{quote(search_group, safe="")}/search', {'scope': 'projects', 'search': search_term})
         data = jsonbackend.loads(response.content)
         if isinstance(data, list) and len(data) > 0:
             return response.status_code, data[0]
@@ -953,8 +956,8 @@ def main(preset=None, dry_run=None, config_manager=None):
             print(f'{LIGHT_RED}GitHub token or organization not set in config. Please set them and try again.{WHITE}')
             return
 
-        if clone_source == 'GitLab' and (not config_manager.config.gitlab_token or not config_manager.config.gitlab_organization):
-            print(f'{LIGHT_RED}GitLab token or organization not set in config. Please set them and try again.{WHITE}')
+        if clone_source == 'GitLab' and (not config_manager.config.gitlab_token or not config_manager.config.gitlab_organization or not config_manager.config.gitlab_server):
+            print(f'{LIGHT_RED}GitLab token, organization, or server not set in config. Please set them and try again.{WHITE}')
             return
 
         client_type = GitHubAPIClient if clone_source == "GitHub" else GitLabAPIClient
@@ -966,7 +969,7 @@ def main(preset=None, dry_run=None, config_manager=None):
         debug = config_manager.config.debug
         log_handler = LogHandler(LogLevel.DEBUG if debug else LogLevel.CRITICAL)
         log_handler.censored_strs.append(access_token)
-        client = client_type(access_token, organization, log_handler)
+        client = client_type(config_manager.config, log_handler)
         stop_2 = perf_counter()
 
         prev_repo_prefix = '' if not config_manager.config.clone_history else config_manager.config.clone_history[-1].assignment_name

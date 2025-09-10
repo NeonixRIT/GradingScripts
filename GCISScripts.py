@@ -52,18 +52,23 @@ def verify_presets(config) -> set:
             preset.append('GitHub')
     return invalid_fields
 
-def verify_github_token_org(config) -> set:
+def verify_github_conf(config) -> set:
     invalid_fields = set()
     if (not config.github_token or not config.github_organization) and config.default_clone_source == 'GitHub':
-        print(f'{LIGHT_RED}WARNING: GitHub token and Org is required if using GitHub as default clone source.{WHITE}')
+        print(f'{LIGHT_RED}WARNING: GitHub token and organization are required if using GitHub as default clone source.{WHITE}')
         invalid_fields.add('github_token')
     return invalid_fields
 
-def verify_gitlab_token_org(config) -> set:
+def verify_gitlab_conf(config) -> set:
     invalid_fields = set()
-    if (not config.gitlab_token or not config.gitlab_organization) and config.default_clone_source == 'GitLab':
-        print(f'{LIGHT_RED}WARNING: GitLab token and Org is required if using GitLab as default clone source.{WHITE}')
+    if (not config.gitlab_token or not config.gitlab_organization or not config.gitlab_server) and config.default_clone_source == 'GitLab':
+        print(f'{LIGHT_RED}WARNING: GitLab token, organization, and server are required if using GitLab as default clone source.{WHITE}')
         invalid_fields.add('gitlab_token')
+    if (config.gitlab_server and not config.gitlab_server.startswith('http')):
+        print(f'{LIGHT_RED}WARNING: GitLab server URL expected to start with http or https.{WHITE}')
+        invalid_fields.add('gitlab_server')
+    if config.gitlab_server.endswith('/'):
+        config.gitlab_server = config.gitlab_server[:-1]
     return invalid_fields
 
 def set_csv_values(context, entry, prompt_func):
@@ -149,6 +154,7 @@ def main():
     )
     github_org_entry = ConfigEntry('github_organization', 'GitHub Organization', None, 'GitHub Organization Name (enter to skip): ', prompt=True)
     gitlab_org_entry = ConfigEntry('gitlab_organization', 'GitLab Organization', None, 'GitLab Organization Name (enter to skip): ', prompt=True)
+    gitlab_server_entry = ConfigEntry('gitlab_server', 'GitLab Server', None, 'GitLab Server (enter to skip): ', prompt=True)
     students_csv = ConfigEntry(
         'students_csv',
         'Students CSV Path',
@@ -182,6 +188,7 @@ def main():
         github_token_entry,
         github_org_entry,
         gitlab_org_entry,
+        gitlab_server_entry,
         students_csv,
         out_dir_entry,
         replace_clone_duplicates,
@@ -198,8 +205,8 @@ def main():
 
     # Register Custom Verify Methods
     # tui.context.config_manager += verify_token_org
-    tui.context.config_manager += verify_github_token_org
-    tui.context.config_manager += verify_gitlab_token_org
+    tui.context.config_manager += verify_github_conf
+    tui.context.config_manager += verify_gitlab_conf
     tui.context.config_manager += verify_presets
 
     # Define Main Menu
