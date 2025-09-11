@@ -108,10 +108,12 @@ def get_students(student_filename: str) -> dict:
     """
     students = {}  # student dict
     if Path(student_filename).exists():  # if classroom roster is found
-        with open(student_filename) as f_handle:  # use with to auto close file
+        with open(student_filename, newline='') as f_handle:  # use with to auto close file
             csv_reader = csv.reader(f_handle)  # Use csv reader to separate values into a list
             next(csv_reader)  # skip header line
             for student in csv_reader:
+                if not student or len(student) < 2:
+                    continue
                 name = re.sub(r'([.]\s?|[,]\s?|\s)', '-', student[0]).replace("'", '-').rstrip(r'-').strip()
                 github = student[1].strip()
                 if name and github:  # if csv contains student name and github username, map them to each other
@@ -922,6 +924,7 @@ def main(preset=None, dry_run=None, config_manager=None):
     start_1 = perf_counter()
     prints_log = []
     repos_created = False
+    debug = config_manager.config.debug
     students_path = config_manager.config.students_csv
     default_clone_source = config_manager.config.default_clone_source
     stop_1 = perf_counter()
@@ -966,7 +969,7 @@ def main(preset=None, dry_run=None, config_manager=None):
         organization = config_manager.config.github_organization if clone_source == "GitHub" else config_manager.config.gitlab_organization
         delete_duplicates = config_manager.config.replace_clone_duplicates
 
-        debug = config_manager.config.debug
+
         log_handler = LogHandler(LogLevel.DEBUG if debug else LogLevel.CRITICAL)
         log_handler.censored_strs.append(access_token)
         client = client_type(config_manager.config, log_handler)
