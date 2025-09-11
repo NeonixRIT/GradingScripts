@@ -348,6 +348,9 @@ class GitRepo:
     def clone(self, out_dir: Path | str, depth: int = None, single_branch: bool = True, use_cloned_done: bool = False, dry_run: bool = False):
         self.status = RepoStatus.CLONING
         clone_url = self.get_clone_url()
+        if clone_url is None:
+            self.status = RepoStatus.CLONE_ERROR
+            return None, None, -1
         cmd = ['git', 'clone']
         if single_branch:
             cmd.append('--single-branch')
