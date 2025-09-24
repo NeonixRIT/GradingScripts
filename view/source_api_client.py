@@ -406,7 +406,8 @@ class GitLabRepo(GitRepo):
         return f'{self.real_name.replace("-", "_")}/{self.prefix}'
 
     def get_clone_url(self):
-        return self.repo_info.get('ssh_url_to_repo', None)
+        return self.repo_info.get('http_url_to_repo', None).replace('https://', f'https://oauth2:{self.api_client.access_token}@')
+        # return self.repo_info.get('ssh_url_to_repo', None)
 
 
 class GitHubAPIClient(APIClient):
