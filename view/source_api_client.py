@@ -577,6 +577,7 @@ class GitLabAPIClient(APIClient):
         access_token = config.gitlab_token
         organization = config.gitlab_organization
         self.server_url = config.gitlab_server
+        self.gitlab_path_to_repos = config.gitlab_path_to_repos
         headers = {
             'Accept': 'application/json',
             'Authorization': f'Bearer {access_token}'
@@ -668,7 +669,7 @@ class GitLabAPIClient(APIClient):
         # repo.prefix
         student_group_name = repo.real_name.replace("-", "_")
         search_term = repo.prefix
-        search_group = f'{self.organization}/students/{student_group_name}'
+        search_group = f'{self.organization}{self.gitlab_path_to_repos}{student_group_name}'
 
         response = self.sync_request(f'{self.server_url}/api/v4/groups/{quote(search_group, safe="")}/search', {'scope': 'projects', 'search': search_term})
         data = jsonbackend.loads(response.content)

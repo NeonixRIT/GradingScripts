@@ -182,6 +182,13 @@ def main():
     presets = ConfigEntry('presets', 'Presets', [], None, prompt=False)
     clone_history = ConfigEntry('clone_history', 'Clone History', [], None, prompt=False)
     student_params = ConfigEntry('extra_student_parameters', 'Extra Student Parameters', [], None, prompt=False)
+    gitlab_path_to_repos = ConfigEntry(
+        'gitlab_path_to_repos',
+        'Gitlab path to repos',
+        'students',
+        'Subpath to repos: ',
+        prompt=True,
+    )
     config_entries = [
         default_clone_source,
         gitlab_token_entry,
@@ -195,6 +202,7 @@ def main():
         presets,
         clone_history,
         student_params,
+        gitlab_path_to_repos,
     ]
 
     # Define Default Folders
