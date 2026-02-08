@@ -629,7 +629,7 @@ class GitLabAPIClient(APIClient):
         except Exception as _:
             repo.status = RepoStatus.ACTIVITY_ERROR
 
-    def get_commit_before_by_repo(self, datetime: datetime, repo: 'GitLabRepo'):
+    def get_commit_before_by_repo(self, in_datetime: datetime, repo: 'GitLabRepo'):
         try:
             if repo.status != RepoStatus.RETRIEVED:
                 return None
@@ -647,14 +647,14 @@ class GitLabAPIClient(APIClient):
                 repo.status = RepoStatus.NO_COMMITS
                 return None
 
-            params['before'] = datetime.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
+            params['before'] = (in_datetime + timedelta(days=1)).strftime('%Y-%m-%dT%H:%M:%S.%fZ')
             response = self.sync_request(url, params)
             if response.status_code != 200:
                 repo.status = RepoStatus.ACTIVITY_ERROR
                 return -1
 
             pushes = response.json()
-            if not pushes:
+            if not pushes or 'created_at' not in pushes[0] or datetime.fromisoformat(pushes[0]['created_at'].replace("Z", "+00:00")).replace(tzinfo=None) >= in_datetime:
                 repo.status = RepoStatus.COMMIT_NOT_FOUND
                 return None
 
