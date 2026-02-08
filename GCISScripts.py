@@ -23,7 +23,7 @@ from view import (
     StudentParamsMenu,
 )
 
-VERSION = '2.7.0'
+VERSION = '2.6.2'
 
 
 # def verify_token_org(config) -> set:
